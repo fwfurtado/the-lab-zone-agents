@@ -1,6 +1,5 @@
 import logging
 from collections.abc import Sequence
-from typing import Awaitable, Callable
 
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
@@ -8,6 +7,7 @@ from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
+from bot.types import OnDelta
 from config import get_settings
 
 logger = logging.getLogger("slack_qa_bot.agent")
@@ -50,7 +50,7 @@ agent = Agent(
 async def answer(
     question: str,
     history: Sequence[ModelMessage] | None = None,
-    on_delta: Callable[[str], Awaitable[None]] | None = None,
+    on_delta: OnDelta | None = None,
 ) -> str:
     message_history = history or []
 

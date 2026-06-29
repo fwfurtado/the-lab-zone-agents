@@ -1,12 +1,10 @@
 import logging
-from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
-
-from pydantic_ai.messages import ModelMessage
 
 from bot.history import SlackHistoryBuilder
 from bot.message_parser import SlackMessageParser
 from bot.slack_message_updater import SlackMessageUpdater
+from bot.types import AnswerFn
 from metrics import answer_errors_total, answer_latency, questions_total
 
 
@@ -17,7 +15,7 @@ class SlackResponder:
         logger: logging.Logger,
         history_builder: SlackHistoryBuilder,
         message_parser: SlackMessageParser,
-        answer_fn: Callable[[str, Sequence[ModelMessage] | None], Awaitable[str]],
+        answer_fn: AnswerFn,
     ) -> None:
         self._logger = logger
         self._history_builder = history_builder
@@ -63,7 +61,9 @@ class SlackResponder:
                 message_parser=self._message_parser,
             )
             with answer_latency.time():
-                reply = await self._answer(question, history)
+                reply = await self._answer(
+                    question, history, message_updater.push
+                )
 
             await message_updater.finalize(reply)
         except Exception:

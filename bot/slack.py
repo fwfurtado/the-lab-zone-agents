@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from async_lru import alru_cache
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from slack_bolt.async_app import AsyncApp
 
@@ -42,9 +43,19 @@ async def handle_message(event, client, say):
     await _respond(event, client, say)
 
 
+@alru_cache(maxsize=1)
+async def _get_bot_user_id() -> str:
+    """Busca o user id do bot uma vez e memoiza pela vida do processo.
+
+    O user id não muda com rotação de token, então cache permanente é seguro.
+    Evita um auth_test() de rede a cada mensagem recebida.
+    """
+    auth = await app.client.auth_test()
+    return auth["user_id"]
+
+
 async def _respond(event, client, say) -> None:
-    auth = await client.auth_test()
-    bot_user_id = auth["user_id"]
+    bot_user_id = await _get_bot_user_id()
     await responder.respond(event, client, say, bot_user_id=bot_user_id)
 
 
