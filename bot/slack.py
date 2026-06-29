@@ -51,7 +51,10 @@ async def _get_bot_user_id() -> str:
     Evita um auth_test() de rede a cada mensagem recebida.
     """
     auth = await app.client.auth_test()
-    return auth["user_id"]
+    user_id = auth["user_id"]
+    if not isinstance(user_id, str):
+        raise RuntimeError(f"auth_test retornou user_id inesperado: {user_id!r}")
+    return user_id
 
 
 async def _respond(event, client, say) -> None:
