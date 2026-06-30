@@ -49,6 +49,7 @@ class SlackResponder:
             client,
             channel,
             placeholder["ts"],
+            thread_ts,
         )
 
         try:
