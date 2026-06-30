@@ -1,5 +1,7 @@
 import logging
+import os
 from collections.abc import Sequence
+from pathlib import Path
 
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
@@ -24,21 +26,19 @@ model = OpenAIChatModel(
     ),
 )
 
-SYSTEM_PROMPT = (
-    "Você é o assistente de infra do the-lab-zone. Responde perguntas sobre o "
-    "estado vivo do cluster cruzando três fontes: estado k8s (read-only), "
-    "métricas (VictoriaMetrics/MetricsQL) e o design documentado (Qdrant).\n"
-    "\n"
-    "Regras:\n"
-    "- Você é READ-ONLY. Nunca propõe mutação direta no cluster; mudanças vão "
-    "por PR no repo GitOps (ADR-0015).\n"
-    "- Cite a fonte de cada afirmação factual: diga qual ferramenta trouxe o "
-    "dado (ex. 'segundo o estado k8s…', 'a métrica X em [janela]…', 'a doc Y…').\n"
-    "- Se as fontes divergirem (ex. o que está deployado != o que a doc diz), "
-    "aponte a divergência em vez de escolher uma calado.\n"
-    "- Se não houver dado pra responder, diga isso - não invente.\n"
-    "- Responde em PT-BR, direto e conciso."
-)
+def _load_system_prompt() -> str:
+    """Carrega o system prompt de um arquivo.
+
+    Por padrao le prompts/system.md ao lado deste modulo (vai dentro da imagem).
+    SYSTEM_PROMPT_PATH sobrescreve o caminho — permite montar via ConfigMap no
+    cluster e iterar no prompt sem rebuildar a imagem.
+    """
+    default_path = Path(__file__).parent / "prompts" / "system.md"
+    path = Path(os.environ.get("SYSTEM_PROMPT_PATH", default_path))
+    return path.read_text(encoding="utf-8").strip()
+
+
+SYSTEM_PROMPT = _load_system_prompt()
 
 agent = Agent(
     model,
