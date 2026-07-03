@@ -1,0 +1,141 @@
+// Package alertmanager modela o payload do webhook (versão 4) e o traduz para
+// o que o pipeline precisa: uma chave de deduplicação estável e o contexto
+// textual entregue ao núcleo de triagem.
+package alertmanager
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"sort"
+	"strings"
+	"time"
+)
+
+// Payload é o corpo do webhook do Alertmanager (data version 4).
+type Payload struct {
+	Version           string            `json:"version"`
+	GroupKey          string            `json:"groupKey"`
+	Status            string            `json:"status"` // firing | resolved (do grupo)
+	Receiver          string            `json:"receiver"`
+	GroupLabels       map[string]string `json:"groupLabels"`
+	CommonLabels      map[string]string `json:"commonLabels"`
+	CommonAnnotations map[string]string `json:"commonAnnotations"`
+	ExternalURL       string            `json:"externalURL"`
+	Alerts            []Alert           `json:"alerts"`
+}
+
+// Alert é um alerta individual dentro do grupo.
+type Alert struct {
+	Status      string            `json:"status"`
+	Labels      map[string]string `json:"labels"`
+	Annotations map[string]string `json:"annotations"`
+	StartsAt    time.Time         `json:"startsAt"`
+	EndsAt      time.Time         `json:"endsAt"`
+	Fingerprint string            `json:"fingerprint"`
+}
+
+// maxBody limita o corpo aceito do webhook. Um grupo com max_alerts: 20 fica
+// muito abaixo disto; acima é payload malformado ou abuso.
+const maxBody = 1 << 20 // 1 MiB
+
+// Parse decodifica e valida o payload a partir do corpo da requisição.
+//
+// Tolerante a campos desconhecidos de propósito (sem DisallowUnknownFields):
+// o Alertmanager pode ganhar campos novos no v4 sem quebrar a borda. A
+// validação dura é estrutural (groupKey e alerts presentes); a versão
+// divergente é responsabilidade do chamador logar, não abortar.
+func Parse(r io.Reader) (*Payload, error) {
+	dec := json.NewDecoder(io.LimitReader(r, maxBody))
+
+	var p Payload
+	if err := dec.Decode(&p); err != nil {
+		return nil, fmt.Errorf("decodificando payload: %w", err)
+	}
+	if p.GroupKey == "" {
+		return nil, fmt.Errorf("payload sem groupKey")
+	}
+	if len(p.Alerts) == 0 {
+		return nil, fmt.Errorf("payload sem alertas")
+	}
+	return &p, nil
+}
+
+// Firing devolve só os alertas em estado firing.
+func (p *Payload) Firing() []Alert {
+	out := make([]Alert, 0, len(p.Alerts))
+	for _, a := range p.Alerts {
+		if a.Status == "firing" {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// DedupKey deriva a chave de deduplicação do grupo: groupKey + o conjunto
+// ordenado de (fingerprint, startsAt) dos alertas firing.
+//
+// Propriedades desejadas:
+//   - Reenvio idêntico (repeat_interval sem mudança) → mesma chave → dedup.
+//   - Alerta NOVO entrando no grupo (group_interval) → chave muda → re-triagem
+//     com o contexto mais completo.
+//   - Mesmo alertname re-disparando depois de resolver → startsAt muda → chave
+//     muda → triagem nova (é um incidente novo).
+func (p *Payload) DedupKey() string {
+	firing := p.Firing()
+	parts := make([]string, 0, len(firing))
+	for _, a := range firing {
+		parts = append(parts, a.Fingerprint+"|"+a.StartsAt.UTC().Format(time.RFC3339))
+	}
+	sort.Strings(parts)
+	h := sha256.Sum256([]byte(p.GroupKey + "\n" + strings.Join(parts, "\n")))
+	return hex.EncodeToString(h[:16])
+}
+
+// RenderContext monta o texto entregue ao núcleo de triagem. Só fatos do
+// alerta — o formato do diagnóstico é responsabilidade do system prompt do
+// agente, não daqui.
+func (p *Payload) RenderContext() string {
+	firing := p.Firing()
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Grupo de alertas do Alertmanager (%d firing).\n", len(firing))
+	if len(p.GroupLabels) > 0 {
+		fmt.Fprintf(&sb, "Agrupado por: %s\n", renderLabels(p.GroupLabels))
+	}
+	sb.WriteString("\n")
+
+	for i, a := range firing {
+		name := a.Labels["alertname"]
+		if name == "" {
+			name = "(sem alertname)"
+		}
+		fmt.Fprintf(&sb, "[%d] %s\n", i+1, name)
+		fmt.Fprintf(&sb, "    desde: %s\n", a.StartsAt.UTC().Format(time.RFC3339))
+		if v := a.Annotations["summary"]; v != "" {
+			fmt.Fprintf(&sb, "    summary: %s\n", v)
+		}
+		if v := a.Annotations["description"]; v != "" {
+			fmt.Fprintf(&sb, "    description: %s\n", v)
+		}
+		fmt.Fprintf(&sb, "    labels: %s\n", renderLabels(a.Labels))
+	}
+
+	sb.WriteString("\nInvestigue e produza o diagnóstico triado deste(s) alerta(s).")
+	return sb.String()
+}
+
+// renderLabels serializa labels de forma determinística (ordenadas por chave).
+func renderLabels(labels map[string]string) string {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%q", k, labels[k]))
+	}
+	return strings.Join(parts, " ")
+}

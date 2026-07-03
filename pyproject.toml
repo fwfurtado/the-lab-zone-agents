@@ -16,6 +16,7 @@ dependencies = [
 [project.scripts]
 qa-bot = "agents.qa.main:main"
 triage = "agents.triage.cli:main"
+triage-serve = "agents.triage.server:main"
 
 [build-system]
 requires = ["setuptools>=68"]

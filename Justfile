@@ -27,3 +27,10 @@ qa-bot-dev env_file=".env.tpl":
         -e TOOLHIVE_VMCP_URL -e LITELLM_BASE_URL -e LITELLM_KEY \
         -e SLACK_BOT_TOKEN -e SLACK_APP_TOKEN -e MODEL_NAME -e LOG_LEVEL \
         ofwfurtado/the-lab-zone-slack-bot:dev
+
+# Borda Go da triagem (Fase B): build/test/imagem
+webhook-test:
+    cd services/triage-webhook && go vet ./... && go test -race ./...
+
+webhook-build tag_name="dev":
+    docker build -t ofwfurtado/the-lab-zone-triage-webhook:{{tag_name}} services/triage-webhook
