@@ -1,7 +1,7 @@
 # Borda Go do agente de triagem (Fase B, ADR-0017).
 # Contexto de build: services/triage-webhook (auto-contido; go.mod próprio).
 
-FROM golang:1.23-alpine AS build
+FROM golang:1.26-alpine AS build
 
 WORKDIR /src
 

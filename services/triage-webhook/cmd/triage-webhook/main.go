@@ -65,7 +65,7 @@ func run() error {
 	cache := dedup.New(cfg.DedupTTL, nil)
 	coreClient := core.New(cfg.CoreURL, cfg.CoreHealthURL)
 	pub := publish.NewLog(log)
-	pool := pipeline.New(cfg.Workers, cfg.QueueSize, cfg.TriageTimeout, coreClient, pub, m, log)
+	pool := pipeline.New(cfg.Workers, cfg.QueueSize, cfg.TriageTimeout, coreClient, pub, cache, m, log)
 
 	webhookSrv := server.Webhook(cfg.WebhookAddr, pool, cache, coreClient, m, log)
 	metricsSrv := server.Metrics(cfg.MetricsAddr, reg)

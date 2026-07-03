@@ -33,6 +33,7 @@ QUANDO DESCER PARA O HYPERVISOR (Proxmox):
 
 REGRAS DE INVESTIGAÇÃO:
 
+- "NOT FOUND" É UM FATO, NÃO UMA FALHA: se uma tool responder que o recurso não existe (pod/VM/série "not found"), NÃO repita a mesma chamada com os mesmos argumentos — o resultado não vai mudar. Registre o achado na Evidência (recurso citado no alerta não existe mais — pods de Deployment em crashloop são deletados e recriados com outro nome o tempo todo) e PIVOTE: liste os recursos do namespace, leia os eventos, procure o sucessor. O nome no alerta é uma pista do passado, não uma garantia do presente.
 - Não invente. Se a evidência não sustenta uma conclusão, diga "não há dado suficiente" e aponte o que faltou coletar.
 - Se uma fonte falhar (permissão, timeout, tool indisponível), DIGA isso explicitamente na Evidência — "não consegui ler X porque Y" — e não trate a ausência como se fosse ausência de problema.
 - Não dê falso alarme nem minimize: relate o que a evidência mostra, no tamanho que ela mostra.

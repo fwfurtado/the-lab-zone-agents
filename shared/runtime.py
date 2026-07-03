@@ -81,7 +81,15 @@ def build_agent(system_prompt: str) -> Agent:
     passa de max_tool_result_chars.
     """
     settings = get_settings()
-    toolhive = MCPToolset(settings.toolhive_vmcp_url)
+    # max_retries=3 (default efetivo é 1): ToolError do vMCP vira ModelRetry —
+    # o erro VOLTA pro modelo como resultado, que é o que queremos ("pod not
+    # found" durante triagem é um ACHADO, não falha terminal). Com teto 1, o
+    # modelo insistir UMA vez na mesma chamada já matava a run inteira com
+    # UnexpectedModelBehavior. Três tentativas dão espaço pro modelo pivotar
+    # (listar pods, ler eventos); se ele insistir além disso, aí sim é loop e
+    # o teto derruba. Não usar tool_error_behavior='error': mataria a run na
+    # PRIMEIRA falha de tool, sem chance de pivô.
+    toolhive = MCPToolset(settings.toolhive_vmcp_url, max_retries=3)
     capped = CappedToolset(wrapped=toolhive, max_chars=settings.max_tool_result_chars)
     model = OpenAIChatModel(
         settings.model_name,

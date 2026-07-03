@@ -35,6 +35,13 @@ type Triager interface {
 	Triage(ctx context.Context, contextText string) (string, error)
 }
 
+// Forgetter remove uma chave da janela de dedup (implementado por dedup.Cache).
+// Interface estreita no ponto de uso: o pipeline não precisa conhecer o cache,
+// só saber desfazer o registro.
+type Forgetter interface {
+	Forget(key string)
+}
+
 // Pool é a fila + workers.
 type Pool struct {
 	jobs    chan Job
@@ -42,18 +49,20 @@ type Pool struct {
 	timeout time.Duration
 	core    Triager
 	pub     publish.Publisher
+	forget  Forgetter
 	m       *metrics.Set
 	log     *slog.Logger
 }
 
 // New cria o pool. Nada roda até Run.
-func New(workers, queueSize int, timeout time.Duration, core Triager, pub publish.Publisher, m *metrics.Set, log *slog.Logger) *Pool {
+func New(workers, queueSize int, timeout time.Duration, core Triager, pub publish.Publisher, forget Forgetter, m *metrics.Set, log *slog.Logger) *Pool {
 	return &Pool{
 		jobs:    make(chan Job, queueSize),
 		workers: workers,
 		timeout: timeout,
 		core:    core,
 		pub:     pub,
+		forget:  forget,
 		m:       m,
 		log:     log,
 	}
@@ -145,7 +154,15 @@ func (p *Pool) process(ctx context.Context, log *slog.Logger, job Job) {
 
 	if err != nil {
 		p.m.RunErrors.Inc()
-		log.Error("triagem falhou", "dedup_key", job.DedupKey, "elapsed", elapsed.String(), "err", err)
+		// Invariante da janela de dedup: ela contém chaves TRIADAS COM SUCESSO
+		// ou EM CURSO. Triagem que falhou libera a chave — o próximo reenvio do
+		// Alertmanager re-tria em vez de bater em "duplicate" para um grupo que
+		// nunca produziu diagnóstico. Sem isto o invariante dependeria da
+		// relação numérica DEDUP_TTL < repeat_interval, que é config, não
+		// garantia. (Falha de PUBLICAÇÃO não libera a chave: a triagem
+		// aconteceu; retry de entrega é problema do publisher — B2.)
+		p.forget.Forget(job.DedupKey)
+		log.Error("triagem falhou; chave de dedup liberada para re-triagem", "dedup_key", job.DedupKey, "elapsed", elapsed.String(), "err", err)
 		return
 	}
 
