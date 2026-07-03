@@ -28,6 +28,14 @@ class Settings(BaseSettings):
 
     toolhive_vmcp_url: str = Field(alias="TOOLHIVE_VMCP_URL")
 
+    # Limites RÍGIDOS de runtime do agente. Regra de prompt pede contenção;
+    # estes garantem. Defesa contra tool que despeja resultado gigante e
+    # contra loop de tools estourando o contexto/custo.
+    max_tool_result_chars: int = Field(default=60_000, alias="MAX_TOOL_RESULT_CHARS")
+    agent_request_limit: int = Field(default=25, alias="AGENT_REQUEST_LIMIT")
+    agent_tool_calls_limit: int = Field(default=40, alias="AGENT_TOOL_CALLS_LIMIT")
+    agent_total_tokens_limit: int = Field(default=600_000, alias="AGENT_TOTAL_TOKENS_LIMIT")
+
     log_level: int = Field(default=logging.INFO, alias="LOG_LEVEL")
 
     @field_validator("log_level", mode="before")
