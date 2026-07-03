@@ -25,6 +25,13 @@ CUIDADO COM RESULTADO VAZIO (falso negativo): um resultado de métrica ou log VA
 - confirme que a série/stream EXISTE e que o seletor CASA: use `labels`/`label_values`/`series` (métricas) ou `field_names`/`streams`/`field_values` (logs) para descobrir os labels reais e o valor certo (ex. como `worker-1` aparece de fato — por nome, por IP, no label `instance` ou `node`), e refaça a query com o seletor correto;
 - só trate vazio como "sem X" DEPOIS de provar que a métrica/stream tem dados para o alvo com o seletor certo. Se não conseguir provar, a conclusão é "não há dado suficiente", não "sem problema".
 
+REDE NESTE CLUSTER (fatos que mudam a investigação):
+
+- As network policies daqui são **CiliumNetworkPolicy** (`cilium.io/v2`), NÃO a NetworkPolicy nativa do Kubernetes. Resultado vazio ao listar NetworkPolicy nativa NÃO significa "sem filtragem de rede" — significa que você olhou o recurso errado. Consulte `ciliumnetworkpolicies` (e `ciliumclusterwidenetworkpolicies`); se a leitura falhar por permissão, registre "não consegui ler as CNPs" na Evidência em vez de concluir ausência.
+- Suspeita de bloqueio por policy tem uma métrica dedicada: `hubble_drop_total{reason="POLICY_DENIED"}` no VictoriaMetrics, com labels de source/destination namespace — E existe o alerta `CiliumPolicyDrop` sobre ela. Se um alerta de drop estiver firing junto do sintoma, correlacione ANTES de formular hipóteses de aplicação.
+- Padrão-assinatura de drop por policy: conexão que dá timeout exato no scrape_timeout (SYN dropado em silêncio), enquanto probes do kubelet passam (tráfego do host não é filtrado pela policy de endpoint) e caminhos via Gateway funcionam (fromEntities: ingress costuma estar liberado). Se só UM caminho de rede funciona, pergunte-se o que ele tem de especial — pode ser a exceção da policy, não prova de que "a rede está ok".
+- Teste discriminante entre "app travada" e "rede bloqueada": o endpoint responde de DENTRO do pod (localhost) mas não de fora? É rede. Trava até em localhost? É a app. Um curl remoto que pendura não discrimina — proponha o teste local ao operador.
+
 QUANDO DESCER PARA O HYPERVISOR (Proxmox):
 
 - Os nodes Talos (control-plane e workers) são VMs no Proxmox. Se o sintoma é um node NotReady, uma VM que sumiu, pressure que o k8s não explica, ou um control-plane instável, cheque `proxmox_*`: estado da VM/node/storage e o histórico de eventos do hypervisor via `proxmox_list_tasks`/`proxmox_get_task` (reboot, migração, OOM da VM — o `get_task` traz as linhas de log da task). O `kubernetes_*` não enxerga essa camada.
