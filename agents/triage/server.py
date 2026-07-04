@@ -44,6 +44,34 @@ from shared.metrics import (
 
 logger = logging.getLogger("the_lab_zone_triage.server")
 
+
+class _HealthCheckFilter(logging.Filter):
+    """Silencia o access log do health check bem-sucedido.
+
+    O /readyz da borda Go bate no /healthz do núcleo a cada 15s; sem isto, o
+    access log do aiohttp é 99% ruído de liveness. Filtra APENAS GET /healthz
+    com status 2xx — um health check que começar a FALHAR (5xx) continua
+    aparecendo, que é justamente quando o log importa.
+
+    Usa o BaseRequest em record.args["r"] (contrato do AccessLogger do aiohttp)
+    em vez de casar substring na mensagem renderizada — path e status exatos,
+    sem pegar um /triage que por acaso contenha "healthz".
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if not isinstance(args, dict):
+            return True
+        request = args.get("r")
+        response = args.get("s")
+        if request is None:
+            return True
+        if request.method == "GET" and request.path == "/healthz":
+            # 's' é o status HTTP (int) no AccessLogger padrão.
+            if response is None or (isinstance(response, int) and 200 <= response < 300):
+                return False
+        return True
+
 _SEMAPHORE_KEY = web.AppKey("semaphore", asyncio.Semaphore)
 
 
@@ -110,6 +138,11 @@ def main() -> None:
     shutdown_timeout = _env_int("TRIAGE_SHUTDOWN_TIMEOUT", 600)
 
     start_metrics_server(metrics_port)
+
+    # Silencia o ruído de liveness (GET /healthz 2xx) sem perder o resto do
+    # access log — POST /triage e falhas de health continuam visíveis.
+    logging.getLogger("aiohttp.access").addFilter(_HealthCheckFilter())
+
     logger.info(
         "núcleo de triagem escutando em %s:%d (métricas em :%d, concorrência máx %d)",
         host,
