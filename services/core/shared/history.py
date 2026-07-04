@@ -29,6 +29,13 @@ def _is_compressed_stub(tool_name: str, content: str) -> bool:
 
 
 def _compress_tool_return(part: ToolReturnPart) -> tuple[ToolReturnPart, int] | None:
+    # Contrato do pydantic-ai (verificado na 2.1.0): ToolReturnPart expõe
+    # `.files` (lista, vazia quando não-multimodal) e `.model_response_str()`
+    # (o conteúdo textual serializado). Ambos são API interna-ish; se um
+    # upgrade de versão mudá-los, os testes deste módulo quebram — que é o
+    # sinal desejado (foi assim que descobrimos ProcessHistory vs
+    # history_processors). Não substituir por acesso direto a `.content` sem
+    # revalidar: content pode ser não-string (estruturado/multimodal).
     if part.files:
         return None
 
@@ -64,6 +71,13 @@ def compress_history(
     if len(candidates) <= keep_recent_tool_results:
         return messages, 0, 0
 
+    # "N mais recentes" = os N últimos em candidates, que segue ordem de
+    # (message_index, part_index). Para returns SEQUENCIAIS isso é recência
+    # temporal. Para returns PARALELOS (vários no mesmo ModelRequest) a ordem
+    # entre eles é a de disparo, não temporal — mas todos têm a mesma idade
+    # (mesmo request), então qual deles cai na janela é indiferente para o
+    # objetivo (limitar o volume reentrante). O pareamento é preservado em
+    # qualquer caso, pois só o content é trocado.
     protected = set(candidates[-keep_recent_tool_results:]) if keep_recent_tool_results else set()
     updated_messages: list[ModelMessage] | None = None
     compressed_total = 0

@@ -143,6 +143,48 @@ async def test_history_processing_is_noop_when_disabled_or_under_limit(monkeypat
     get_settings.cache_clear()
 
 
+def test_parallel_tool_returns_in_single_request():
+    # Tool calls PARALELAS: o Pydantic AI coalesce vários ToolReturnPart num
+    # único ModelRequest. O keep_recent protege por (message_index,
+    # part_index), não por message — então comprimir um dos returns paralelos
+    # não pode afetar os outros nem quebrar o pareamento (o tool_call_id fica).
+    history: list[ModelMessage] = [
+        ModelResponse(
+            parts=[
+                ToolCallPart(tool_name="t1", args={}, tool_call_id="c1"),
+                ToolCallPart(tool_name="t2", args={}, tool_call_id="c2"),
+                ToolCallPart(tool_name="t3", args={}, tool_call_id="c3"),
+            ]
+        ),
+        ModelRequest(
+            parts=[
+                ToolReturnPart(tool_name="t1", content="x" * 400, tool_call_id="c1"),
+                ToolReturnPart(tool_name="t2", content="y" * 400, tool_call_id="c2"),
+                ToolReturnPart(tool_name="t3", content="z" * 400, tool_call_id="c3"),
+            ]
+        ),
+        ModelResponse(parts=[TextPart(content="relatorio final")]),
+    ]
+
+    processed, compressed_total, _ = compress_history(
+        history,
+        enabled=True,
+        keep_recent_tool_results=2,
+    )
+
+    # Dos 3 returns (todos no mesmo request), 2 protegidos, 1 comprimido.
+    assert compressed_total == 1
+    assert _is_tool_pairing_valid(processed)
+
+    request = processed[1]
+    assert isinstance(request, ModelRequest)
+    contents = [p.content for p in request.parts if isinstance(p, ToolReturnPart)]
+    compressed = [c for c in contents if isinstance(c, str) and "comprimido" in c]
+    intact = [c for c in contents if isinstance(c, str) and "comprimido" not in c]
+    assert len(compressed) == 1
+    assert len(intact) == 2
+
+
 def test_stub_template_mentions_compression():
     note = _COMPRESSED_NOTE.format(name="tool", omitted=123)
     assert "comprimido" in note
