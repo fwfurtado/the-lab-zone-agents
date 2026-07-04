@@ -32,8 +32,10 @@ include = ["shared*", "agents*"]
 [dependency-groups]
 # Ferramentas de dev/CI. Instaladas por `uv sync` mas fora da imagem de runtime.
 dev = [
+    "mypy>=2.1.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",  # os handlers e o agente são async
+    "ruff>=0.15.20",
 ]
 
 [tool.ruff]

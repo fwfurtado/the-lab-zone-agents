@@ -6,7 +6,3 @@ uv = "0.11.12"
 go = "1.26"
 # Lint Go: agrega vet + staticcheck + errcheck + ineffassign etc.
 golangci-lint = "2.5.0"
-# Lint/format Python: ruff (linter+formatter, um só) e mypy (type-check).
-# pytest e libs Python vêm via uv/pyproject, não aqui.
-ruff = "0.14.0"
-mypy = "1.14.1"
