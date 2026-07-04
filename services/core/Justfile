@@ -2,8 +2,9 @@
 # Contrato comum do monorepo: test / lint / fmt. Chamado pelo Justfile da raiz
 # e pelo CI — o que roda aqui é o que roda no pipeline (paridade local↔CI).
 
-# Roda a suíte. Sem testes ainda: pytest sai 0 (nada a rodar) — a recipe é o
-# lugar onde a suíte vai crescer, não um placeholder que mente sucesso.
+# Roda a suíte pytest. Há testes em shared/test_*.py; o pytest coleta e
+# executa. (Nota: pytest sai com código 5 se NÃO coletar nenhum teste — por
+# isso a suíte não pode ficar vazia. Mantê-la povoada é o contrato.)
 test:
     uv run pytest
 

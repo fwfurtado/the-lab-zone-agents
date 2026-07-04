@@ -112,7 +112,7 @@ jobs:
           go-version-file: services/triage-webhook/go.mod
       - name: Setup golangci-lint
         if: matrix.service == 'triage-webhook'
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
           version: v2.5.0
           working-directory: services/triage-webhook
