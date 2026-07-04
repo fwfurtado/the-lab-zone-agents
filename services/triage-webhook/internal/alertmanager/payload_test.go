@@ -94,3 +94,40 @@ func TestRenderContextCarriesFacts(t *testing.T) {
 		t.Fatal("alerta resolved não deveria entrar no contexto")
 	}
 }
+
+func TestSummaryReadable(t *testing.T) {
+	p := parseSample(t)
+	// sample tem KubePodCrashLooping (firing) + KubePodNotReady (resolved);
+	// só o firing conta, e o namespace do groupLabels é "ai".
+	got := p.Summary()
+	if got != "KubePodCrashLooping em ai" {
+		t.Fatalf("summary inesperado: %q", got)
+	}
+}
+
+func TestSummaryDedupsNamesAndTruncates(t *testing.T) {
+	p := &Payload{
+		GroupLabels: map[string]string{"namespace": "observability"},
+		Alerts: []Alert{
+			{Status: "firing", Labels: map[string]string{"alertname": "A"}},
+			{Status: "firing", Labels: map[string]string{"alertname": "A"}}, // duplicado
+			{Status: "firing", Labels: map[string]string{"alertname": "B"}},
+			{Status: "firing", Labels: map[string]string{"alertname": "C"}},
+			{Status: "firing", Labels: map[string]string{"alertname": "D"}},
+		},
+	}
+	// A dedup + 4 nomes distintos (A,B,C,D) => 3 + "+1".
+	got := p.Summary()
+	if got != "A, B, C e +1 em observability" {
+		t.Fatalf("truncamento inesperado: %q", got)
+	}
+}
+
+func TestSummaryWithoutNamespace(t *testing.T) {
+	p := &Payload{
+		Alerts: []Alert{{Status: "firing", Labels: map[string]string{"alertname": "Solo"}}},
+	}
+	if got := p.Summary(); got != "Solo" {
+		t.Fatalf("sem namespace deveria ser só o nome: %q", got)
+	}
+}

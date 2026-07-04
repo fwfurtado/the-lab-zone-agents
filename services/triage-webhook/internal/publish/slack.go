@@ -93,10 +93,16 @@ func (p *SlackPublisher) Publish(ctx context.Context, r Report) error {
 	return nil
 }
 
-// header monta a linha de contexto acima do diagnóstico: grupo triado e link
-// pro alerta no Alertmanager (se externalURL configurado).
+// header monta a linha de contexto acima do diagnóstico: resumo legível do
+// grupo (alertnames + namespace) e link pro alerta no Alertmanager. O
+// groupKey de máquina fica fora do título — ele serve pra correlação no log,
+// não pra leitura humana.
 func (p *SlackPublisher) header(r Report) string {
-	h := fmt.Sprintf("🔍 *Triagem automática* — grupo `%s`", r.GroupKey)
+	summary := r.Summary
+	if summary == "" {
+		summary = "grupo de alertas"
+	}
+	h := fmt.Sprintf("🔍 *Triagem automática* — %s", summary)
 	if p.externalURL != "" {
 		h += fmt.Sprintf("\n<%s/#/alerts|Ver alerta no Alertmanager>", p.externalURL)
 	}

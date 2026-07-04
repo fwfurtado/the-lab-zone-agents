@@ -126,6 +126,51 @@ func (p *Payload) RenderContext() string {
 	return sb.String()
 }
 
+// Summary devolve um resumo curto e legível do grupo, para o título da
+// notificação (Slack). Prioriza o que um humano quer ver ao bater o olho:
+// os alertnames distintos e o namespace, não o groupKey de máquina.
+//
+// Exemplos: "KubePodCrashLooping em ai", "TargetDown, TooManyLogs em
+// observability", "3 alertas". Vazio nunca — sempre há ao menos a contagem.
+func (p *Payload) Summary() string {
+	firing := p.Firing()
+	if len(firing) == 0 {
+		return "sem alertas firing"
+	}
+
+	// Alertnames distintos, preservando ordem de aparição.
+	var names []string
+	seen := make(map[string]bool)
+	for _, a := range firing {
+		n := a.Labels["alertname"]
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		names = append(names, n)
+	}
+
+	// Namespace do agrupamento (group_by: [namespace]) ou o common label.
+	ns := p.GroupLabels["namespace"]
+	if ns == "" {
+		ns = p.CommonLabels["namespace"]
+	}
+
+	var head string
+	switch {
+	case len(names) == 0:
+		head = fmt.Sprintf("%d alertas", len(firing))
+	case len(names) <= 3:
+		head = strings.Join(names, ", ")
+	default:
+		head = fmt.Sprintf("%s e +%d", strings.Join(names[:3], ", "), len(names)-3)
+	}
+	if ns != "" {
+		return head + " em " + ns
+	}
+	return head
+}
+
 // renderLabels serializa labels de forma determinística (ordenadas por chave).
 func renderLabels(labels map[string]string) string {
 	keys := make([]string, 0, len(labels))

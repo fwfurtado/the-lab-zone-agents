@@ -15,8 +15,10 @@ import (
 type Report struct {
 	// DedupKey identifica o grupo triado (correlaciona com os logs de ingest).
 	DedupKey string
-	// GroupKey é o groupKey original do Alertmanager.
+	// GroupKey é o groupKey original do Alertmanager (correlação técnica).
 	GroupKey string
+	// Summary é o resumo legível do grupo, para o título da notificação.
+	Summary string
 	// Context é o texto que foi entregue ao núcleo.
 	Context string
 	// Diagnosis é o relatório produzido pelo agente.

@@ -57,6 +57,7 @@ func Webhook(addr string, pool *pipeline.Pool, cache *dedup.Cache, coreClient *c
 		job := pipeline.Job{
 			DedupKey: key,
 			GroupKey: payload.GroupKey,
+			Summary:  payload.Summary(),
 			Context:  payload.RenderContext(),
 			Received: time.Now(),
 		}

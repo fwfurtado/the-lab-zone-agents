@@ -26,6 +26,7 @@ import (
 type Job struct {
 	DedupKey string
 	GroupKey string
+	Summary  string // resumo legível p/ o título da notificação
 	Context  string
 	Received time.Time
 }
@@ -170,6 +171,7 @@ func (p *Pool) process(ctx context.Context, log *slog.Logger, job Job) {
 	if err := p.pub.Publish(runCtx, publish.Report{
 		DedupKey:  job.DedupKey,
 		GroupKey:  job.GroupKey,
+		Summary:   job.Summary,
 		Context:   job.Context,
 		Diagnosis: report,
 	}); err != nil {

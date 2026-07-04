@@ -59,13 +59,13 @@ func TestSplitMarkdownNeverBreaksCodeFence(t *testing.T) {
 
 func TestSlackHeaderWithAndWithoutURL(t *testing.T) {
 	withURL := NewSlack("t", "#triage", "https://am.example.com", nil)
-	h := withURL.header(Report{GroupKey: "grp-1"})
-	if !strings.Contains(h, "grp-1") || !strings.Contains(h, "am.example.com/#/alerts") {
+	h := withURL.header(Report{Summary: "KubePodCrashLooping em ai"})
+	if !strings.Contains(h, "KubePodCrashLooping em ai") || !strings.Contains(h, "am.example.com/#/alerts") {
 		t.Fatalf("header deveria conter grupo e link: %q", h)
 	}
 
 	noURL := NewSlack("t", "#triage", "", nil)
-	h2 := noURL.header(Report{GroupKey: "grp-2"})
+	h2 := noURL.header(Report{Summary: "x"})
 	if strings.Contains(h2, "http") {
 		t.Fatalf("sem externalURL não deveria haver link: %q", h2)
 	}
