@@ -1,0 +1,163 @@
+name: CI — lint, test e publish por serviço
+
+# Monorepo com serviços em services/<nome>/. Cada serviço:
+#   - é buildado SÓ quando seus arquivos mudam (detecção por path);
+#   - tem versionamento INDEPENDENTE (tag-prefix próprio, semver por
+#     conventional commits — ex.: feat(core): ... sobe só o core);
+#   - passa pelo MESMO contrato antes do build: `just lint` e `just test`.
+#
+# O setup difere por linguagem (uv p/ core, go+golangci p/ webhook), mas a
+# EXECUÇÃO é uniforme via just — adicionar um serviço novo não muda a lógica
+# do CI, só acrescenta um filtro de path e um bloco de setup.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+  workflow_dispatch:
+    inputs:
+      force_service:
+        description: "Serviço p/ buildar manualmente (vazio = todos)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write # semver cria tags git
+  packages: write # push no GHCR
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Detecta quais serviços mudaram → matrix dinâmica. workflow_dispatch com
+  # force_service ignora a detecção e mira o serviço pedido (ou todos).
+  # -------------------------------------------------------------------------
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.decide.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detecta paths alterados
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            core:
+              - 'services/core/**'
+            triage-webhook:
+              - 'services/triage-webhook/**'
+
+      - name: Decide a matrix
+        id: decide
+        env:
+          FORCE: ${{ github.event.inputs.force_service }}
+          CORE_CHANGED: ${{ steps.filter.outputs.core }}
+          WEBHOOK_CHANGED: ${{ steps.filter.outputs.triage-webhook }}
+        run: |
+          set -euo pipefail
+          if [ -n "$FORCE" ]; then
+            echo "services=[\"$FORCE\"]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'services=["core","triage-webhook"]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          svcs=()
+          [ "$CORE_CHANGED" = "true" ] && svcs+=('"core"')
+          [ "$WEBHOOK_CHANGED" = "true" ] && svcs+=('"triage-webhook"')
+          if [ ${#svcs[@]} -eq 0 ]; then
+            echo "services=[]" >> "$GITHUB_OUTPUT"
+          else
+            echo "services=[$(IFS=,; echo "${svcs[*]}")]" >> "$GITHUB_OUTPUT"
+          fi
+
+  # -------------------------------------------------------------------------
+  # Um job por serviço mudado. Setup por linguagem; contrato uniforme (just).
+  # -------------------------------------------------------------------------
+  build:
+    needs: detect
+    if: ${{ needs.detect.outputs.services != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # um serviço quebrado não cancela o build do outro
+      matrix:
+        service: ${{ fromJson(needs.detect.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # histórico completo p/ o semver calcular a próxima tag
+
+      - name: just (comum a todos os serviços)
+        uses: extractions/setup-just@v2
+
+      # ---- Setup específico do core (Python via uv) ----
+      - name: Setup uv
+        if: matrix.service == 'core'
+        uses: astral-sh/setup-uv@v5
+      - name: Sync deps (dev)
+        if: matrix.service == 'core'
+        working-directory: services/core
+        run: uv sync --dev
+
+      # ---- Setup específico do triage-webhook (Go + golangci-lint) ----
+      - name: Setup Go
+        if: matrix.service == 'triage-webhook'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/triage-webhook/go.mod
+      - name: Setup golangci-lint
+        if: matrix.service == 'triage-webhook'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.5.0
+          working-directory: services/triage-webhook
+          # Só instala o binário no PATH — quem roda o lint é o Justfile
+          # (`just lint`), preservando a paridade local↔CI. O install-mode
+          # binary + o run trivial abaixo garantem o binário sem lintar aqui.
+          install-mode: binary
+          only-new-issues: false
+          args: --version
+
+      # ---- Contrato uniforme: lint FALHA o pipeline, depois testa ----
+      - name: Lint
+        working-directory: services/${{ matrix.service }}
+        run: just lint
+
+      - name: Test
+        working-directory: services/${{ matrix.service }}
+        run: just test
+
+      # ---- Versão independente por serviço (tag-prefix próprio) ----
+      - name: Calcula a próxima versão (semver por conventional commits)
+        id: semver
+        uses: grumpy-programmer/conventional-commits-semver-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag-prefix: "${{ matrix.service }}-v"
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build e push
+        uses: docker/build-push-action@v6
+        with:
+          context: services/${{ matrix.service }}
+          file: services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.service }}:${{ steps.semver.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.service }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.semver.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}

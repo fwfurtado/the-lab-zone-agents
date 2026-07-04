@@ -1,0 +1,16 @@
+# Config do golangci-lint (v2) para o triage-webhook.
+# Conjunto sensato: os linters default (govet, staticcheck, errcheck,
+# ineffassign, unused) mais alguns de higiene. Sem linters de opinião forte
+# (funlen, gocognit) que gerariam ruído num serviço já escrito.
+version: "2"
+
+linters:
+  default: standard   # govet, errcheck, staticcheck, ineffassign, unused
+  enable:
+    - errorlint       # comparação/wrap de erro correta (Is/As)
+    - misspell        # typos em comentários/strings
+    - unconvert       # conversões redundantes
+
+formatters:
+  enable:
+    - gofmt

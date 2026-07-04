@@ -22,5 +22,3 @@ just test   # pytest
 just lint   # ruff check + mypy (falha o pipeline em qualquer problema)
 just fmt    # ruff format (corrige no lugar)
 ```
-
-Toolchain gerenciada por `mise` (raiz do monorepo) e dependências por `uv`.
