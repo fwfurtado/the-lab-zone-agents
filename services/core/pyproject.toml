@@ -1,0 +1,63 @@
+[project]
+name = "the-lab-zone-agents"
+version = "0.1.0"
+description = "Agentes read-only do the-lab-zone (QA + Triagem) sobre vMCP/ToolHive."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.12.13",
+    "async-lru>=2.0.4",
+    "prometheus-client>=0.25.0",
+    "pydantic-ai>=2.1.0",
+    "pydantic-settings>=2.14.2",
+    "slack-bolt>=1.28.0",
+]
+
+[project.scripts]
+qa-bot = "agents.qa.main:main"
+triage = "agents.triage.cli:main"
+triage-serve = "agents.triage.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["shared*", "agents*"]
+
+[tool.setuptools.package-data]
+"agents.qa" = ["prompts/*.md"]
+"agents.triage" = ["prompts/*.md"]
+
+[dependency-groups]
+# Ferramentas de dev/CI. Instaladas por `uv sync` mas fora da imagem de runtime.
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",  # os handlers e o agente são async
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# Conjunto sensato sem ser hostil a um codebase existente:
+# E/F (pyflakes+pycodestyle), I (isort), UP (pyupgrade), B (bugbear).
+select = ["E", "F", "I", "UP", "B"]
+# E501 (linha longa) fica a cargo do formatter, não do linter.
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+# Artefatos de build local não são código-fonte.
+exclude = ["build/", "dist/"]
+# Postura pragmática: type-check real, mas sem exigir anotação total num
+# codebase que ainda não é 100% tipado. Endurece com o tempo.
+ignore_missing_imports = true   # libs sem stubs (slack_bolt etc.) não quebram
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["agents", "shared"]

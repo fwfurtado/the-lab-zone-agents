@@ -1,22 +1,64 @@
-image := "the-lab-zone-slack-agents"
-tag := "latest"
+# Justfile do monorepo the-lab-zone-agents.
+#
+# Estrutura: cada serviço vive em services/<nome>/ com seu próprio Justfile
+# expondo o MESMO contrato — test / lint / fmt. Este arquivo orquestra: os
+# alvos agregados rodam em todos os serviços; os granulares (-core, -webhook)
+# miram um só. O CI chama os alvos por-serviço via matrix.
+
+# Serviços do monorepo. Adicionar um serviço = uma entrada aqui + um
+# services/<nome>/Justfile com test/lint/fmt.
+services := "core triage-webhook"
 
 default:
     @just --list
 
-build:
-    docker build -t {{image}}:{{tag}} .
+# ---- Agregados: rodam o contrato em TODOS os serviços ----
 
-build-tag tag_name:
-    docker build -t {{image}}:{{tag_name}} .
-
-
-# Justfile
-qa-bot-dev env_file=".env.tpl":
+test:
     #!/usr/bin/env bash
     set -euo pipefail
-    # Guarda: o env de dev PRECISA apontar pro app Slack de dev (/Labot-dev/).
-    # Sem isso, um .env de prod abriria 2a conexão Socket Mode no app real → fan-out.
+    for svc in {{services}}; do
+        echo "== test: $svc =="
+        just -f services/$svc/Justfile test
+    done
+
+lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for svc in {{services}}; do
+        echo "== lint: $svc =="
+        just -f services/$svc/Justfile lint
+    done
+
+fmt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for svc in {{services}}; do
+        echo "== fmt: $svc =="
+        just -f services/$svc/Justfile fmt
+    done
+
+# ---- Granulares: miram um serviço (o CI usa estes na matrix) ----
+
+test-core:
+    just -f services/core/Justfile test
+lint-core:
+    just -f services/core/Justfile lint
+fmt-core:
+    just -f services/core/Justfile fmt
+
+test-webhook:
+    just -f services/triage-webhook/Justfile test
+lint-webhook:
+    just -f services/triage-webhook/Justfile lint
+fmt-webhook:
+    just -f services/triage-webhook/Justfile fmt
+
+# ---- Dev do QA bot (long-running, Slack) ----
+# Preservado da versão anterior; path ajustado pro services/core/.
+qa-bot-dev env_file="services/core/.env.tpl":
+    #!/usr/bin/env bash
+    set -euo pipefail
     if ! grep -q '/Labot-dev/' {{env_file}}; then
       echo "ERRO: {{env_file}} não referencia '/Labot-dev/' — recusando p/ não conectar no app de prod." >&2
       exit 1
@@ -27,10 +69,3 @@ qa-bot-dev env_file=".env.tpl":
         -e TOOLHIVE_VMCP_URL -e LITELLM_BASE_URL -e LITELLM_KEY \
         -e SLACK_BOT_TOKEN -e SLACK_APP_TOKEN -e MODEL_NAME -e LOG_LEVEL \
         ofwfurtado/the-lab-zone-slack-bot:dev
-
-# Borda Go da triagem (Fase B): build/test/imagem
-webhook-test:
-    cd services/triage-webhook && go vet ./... && go test -race ./...
-
-webhook-build tag_name="dev":
-    docker build -t ofwfurtado/the-lab-zone-triage-webhook:{{tag_name}} services/triage-webhook

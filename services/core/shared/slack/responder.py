@@ -1,11 +1,11 @@
 import logging
 from typing import Any
 
+from shared.metrics import answer_errors_total, answer_latency, questions_total
 from shared.slack.history import SlackHistoryBuilder
 from shared.slack.message_parser import SlackMessageParser
 from shared.slack.message_updater import SlackMessageUpdater
 from shared.types import AnswerFn
-from shared.metrics import answer_errors_total, answer_latency, questions_total
 
 
 class SlackResponder:
@@ -62,9 +62,7 @@ class SlackResponder:
                 message_parser=self._message_parser,
             )
             with answer_latency.time():
-                reply = await self._answer(
-                    question, history, message_updater.push
-                )
+                reply = await self._answer(question, history, message_updater.push)
 
             await message_updater.finalize(reply)
         except Exception:

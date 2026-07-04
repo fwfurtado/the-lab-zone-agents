@@ -1,0 +1,20 @@
+# Justfile do serviço core (Python).
+# Contrato comum do monorepo: test / lint / fmt. Chamado pelo Justfile da raiz
+# e pelo CI — o que roda aqui é o que roda no pipeline (paridade local↔CI).
+
+# Roda a suíte. Sem testes ainda: pytest sai 0 (nada a rodar) — a recipe é o
+# lugar onde a suíte vai crescer, não um placeholder que mente sucesso.
+test:
+    uv run pytest
+
+# Verificação de qualidade — FALHA o pipeline em qualquer problema (contrato).
+# ruff check: lint (regras de estilo/bugs). mypy: type-check estático.
+lint:
+    uv run ruff check .
+    uv run mypy .
+
+# Correção automática — uso local, NÃO roda no CI (tem efeito colateral).
+# ruff format reescreve; ruff check --fix aplica autofixes seguros.
+fmt:
+    uv run ruff format .
+    uv run ruff check --fix .

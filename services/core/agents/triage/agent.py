@@ -7,9 +7,9 @@ config de produção. O _get_assistant é cacheado — um único Assistant por
 processo, criado na primeira chamada a answer(), depois do parse de args.
 """
 
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import Sequence
 
 from shared.prompts import load_prompt
 from shared.runtime import Assistant

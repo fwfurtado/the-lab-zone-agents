@@ -30,9 +30,7 @@ async def start_bot(
     bot_token = settings.slack_bot_token
     app_token = settings.slack_app_token
     if bot_token is None or app_token is None:
-        raise RuntimeError(
-            "SLACK_BOT_TOKEN e SLACK_APP_TOKEN são obrigatórios para o modo bot."
-        )
+        raise RuntimeError("SLACK_BOT_TOKEN e SLACK_APP_TOKEN são obrigatórios para o modo bot.")
 
     app = AsyncApp(
         token=bot_token.get_secret_value(),

@@ -1,6 +1,5 @@
 import time
 
-
 _STREAM_THROTTLE_S = 0.8
 # Teto seguro por mensagem. O markdown block aceita 12k, mas mensagens menores
 # leem melhor no Slack e dao folga pro overhead do bloco. ~3500 e confortavel.

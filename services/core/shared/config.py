@@ -1,5 +1,5 @@
-from functools import lru_cache
 import logging
+from functools import lru_cache
 
 from pydantic import Field, SecretStr
 from pydantic.functional_validators import field_validator
@@ -54,4 +54,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings() # type: ignore[call-arg]
+    return Settings()  # type: ignore[call-arg]

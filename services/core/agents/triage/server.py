@@ -78,6 +78,7 @@ class _HealthCheckFilter(logging.Filter):
             return False
         return True
 
+
 _SEMAPHORE_KEY = web.AppKey("semaphore", asyncio.Semaphore)
 
 
@@ -103,9 +104,7 @@ async def _handle_triage(request: web.Request) -> web.Response:
 
     context = str(payload.get("context") or "").strip()
     if not context:
-        return web.json_response(
-            {"error": "campo 'context' ausente ou vazio"}, status=400
-        )
+        return web.json_response({"error": "campo 'context' ausente ou vazio"}, status=400)
 
     questions_total.inc()
     semaphore = request.app[_SEMAPHORE_KEY]

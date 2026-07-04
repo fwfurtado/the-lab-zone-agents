@@ -1,0 +1,18 @@
+# Justfile do serviço triage-webhook (Go).
+# Contrato comum do monorepo: test / lint / fmt. Mesmos verbos do core — o CI
+# chama os mesmos alvos independente da linguagem do serviço.
+
+# Suíte com race detector — o contrato de drenagem e a dedup dependem disto.
+test:
+    go test -race ./...
+
+# Verificação de qualidade — FALHA o pipeline (contrato):
+# - gofmt -l lista arquivos desformatados; qualquer saída => exit 1.
+# - golangci-lint agrega vet + staticcheck + errcheck + ineffassign etc.
+lint:
+    @test -z "$(gofmt -l .)" || { echo "gofmt: arquivos desformatados:"; gofmt -l .; exit 1; }
+    golangci-lint run ./...
+
+# Correção automática — uso local (efeito colateral): reescreve com gofmt.
+fmt:
+    gofmt -w .
