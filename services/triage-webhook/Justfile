@@ -6,7 +6,9 @@
 test:
     go test -race ./...
 
-# Verificação de qualidade — FALHA o pipeline (contrato):
+# Verificação de qualidade — uso LOCAL (no CI, a golangci-lint-action roda o
+# equivalente, lendo o mesmo .golangci.yml, então as regras são idênticas).
+# Falha em qualquer problema:
 # - gofmt -l lista arquivos desformatados; qualquer saída => exit 1.
 # - golangci-lint agrega vet + staticcheck + errcheck + ineffassign etc.
 lint:

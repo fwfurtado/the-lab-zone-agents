@@ -104,30 +104,33 @@ jobs:
         working-directory: services/core
         run: uv sync --dev
 
-      # ---- Setup específico do triage-webhook (Go + golangci-lint) ----
+      # ---- Setup específico do triage-webhook (Go) ----
       - name: Setup Go
         if: matrix.service == 'triage-webhook'
         uses: actions/setup-go@v5
         with:
           go-version-file: services/triage-webhook/go.mod
-      - name: Setup golangci-lint
+
+      # ---- Lint ----
+      # Go: a golangci-lint-action É o runner (instala + roda + annotations
+      # inline no PR). A config vem do .golangci.yml do serviço — a MESMA que o
+      # `just lint` local lê, então regras idênticas entre CI e dev; só o
+      # invocador difere. gofmt é checado pelo formatter gofmt no .golangci.yml.
+      - name: Lint (Go)
         if: matrix.service == 'triage-webhook'
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.5.0
           working-directory: services/triage-webhook
-          # Só instala o binário no PATH — quem roda o lint é o Justfile
-          # (`just lint`), preservando a paridade local↔CI. O install-mode
-          # binary + o run trivial abaixo garantem o binário sem lintar aqui.
-          install-mode: binary
-          only-new-issues: false
-          args: --version
 
-      # ---- Contrato uniforme: lint FALHA o pipeline, depois testa ----
-      - name: Lint
-        working-directory: services/${{ matrix.service }}
+      # Python: não há action equivalente; o contrato `just lint` (ruff + mypy)
+      # é o caminho. Falha o pipeline em qualquer problema.
+      - name: Lint (core)
+        if: matrix.service == 'core'
+        working-directory: services/core
         run: just lint
 
+      # ---- Test (contrato uniforme via just) ----
       - name: Test
         working-directory: services/${{ matrix.service }}
         run: just test
