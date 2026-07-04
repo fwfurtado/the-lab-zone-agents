@@ -29,16 +29,20 @@ legítimo, não loop).
 ## Decisão
 Todos os caps são **env, tunáveis por processo**, e não hardcoded:
 `AGENT_TOTAL_TOKENS_LIMIT`, `AGENT_REQUEST_LIMIT`, `AGENT_TOOL_CALLS_LIMIT`,
-`MAX_TOOL_RESULT_CHARS`. O mesmo código de runtime serve QA e triagem; cada
-Deployment injeta o orçamento adequado ao seu perfil.
+`AGENT_MAX_CONCURRENCY`, `MAX_TOOL_RESULT_CHARS`. O mesmo código de runtime
+serve QA e triagem; cada Deployment injeta o orçamento adequado ao seu perfil.
 
 A triagem roda com orçamento maior (1.5M tokens, 120 tool calls, 60 requests,
-30k chars por tool result); o QA bot mantém os defaults conservadores. A
-disciplina de calibração: **subir apenas o limite que apertou**, com dado
-empírico, e não antecipar limites que ainda não dispararam.
+30k chars por tool result) e concorrência limitada de tools para não abrir
+rajadas contra o vMCP. O QA bot mantém os defaults conservadores. A disciplina
+de calibração: **subir apenas o limite que apertou**, com dado empírico, e não
+antecipar limites que ainda não dispararam.
 
 ## Consequências
 - Ganhar robustez na triagem não afrouxa o QA bot — orçamento é por Deployment.
+- `AGENT_MAX_CONCURRENCY` não reduz o teto total de investigação; só serializa
+  parte das chamadas quando o modelo pede muitas tools em paralelo, evitando
+  sobrecarga transitória no vMCP.
 - O cap de tool result (`MAX_TOOL_RESULT_CHARS`) ataca o termo quadrático: um
   resultado gordo reentra em toda request seguinte, então cortá-lo cedo reduz
   o crescimento cumulativo, não só o pico.

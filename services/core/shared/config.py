@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     agent_request_limit: int = Field(default=25, alias="AGENT_REQUEST_LIMIT")
     agent_tool_calls_limit: int = Field(default=40, alias="AGENT_TOOL_CALLS_LIMIT")
     agent_total_tokens_limit: int = Field(default=600_000, alias="AGENT_TOTAL_TOKENS_LIMIT")
+    agent_max_concurrency: int | None = Field(default=None, alias="AGENT_MAX_CONCURRENCY")
+    history_compress_enabled: bool = Field(default=False, alias="HISTORY_COMPRESS_ENABLED")
+    history_keep_recent_tool_results: int = Field(
+        default=8,
+        alias="HISTORY_KEEP_RECENT_TOOL_RESULTS",
+    )
 
     log_level: int = Field(default=logging.INFO, alias="LOG_LEVEL")
 
@@ -50,6 +56,20 @@ class Settings(BaseSettings):
             return normalized
 
         raise ValueError(f"invalid log level: {value}")
+
+    @field_validator("history_keep_recent_tool_results")
+    @classmethod
+    def _validate_history_keep_recent_tool_results(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("history_keep_recent_tool_results must be >= 0")
+        return value
+
+    @field_validator("agent_max_concurrency")
+    @classmethod
+    def _validate_agent_max_concurrency(cls, value: int | None) -> int | None:
+        if value is not None and value <= 0:
+            raise ValueError("agent_max_concurrency must be > 0")
+        return value
 
 
 @lru_cache

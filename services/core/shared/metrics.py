@@ -23,6 +23,16 @@ answer_latency = Histogram(
     buckets=(0.5, 1, 2, 5, 10, 20, 30, 60, 120),
 )
 
+history_compressed_total = Counter(
+    "triage_history_compressed_total",
+    "Total de resultados antigos de tool comprimidos no histórico da run.",
+)
+
+history_chars_saved_total = Counter(
+    "triage_history_chars_saved_total",
+    "Total de caracteres removidos de resultados antigos de tool no histórico da run.",
+)
+
 
 def start_metrics_server(port: int = 9090) -> None:
     start_http_server(port)

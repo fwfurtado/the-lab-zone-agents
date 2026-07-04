@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -12,6 +13,7 @@ from pydantic_ai.toolsets import WrapperToolset
 from pydantic_ai.usage import UsageLimits
 
 from shared.config import get_settings
+from shared.history import process_history
 from shared.types import OnDelta
 
 logger = logging.getLogger("the_lab_zone.runtime")
@@ -98,7 +100,13 @@ def build_agent(system_prompt: str) -> Agent:
             api_key=settings.litellm_key.get_secret_value(),
         ),
     )
-    return Agent(model, toolsets=[capped], system_prompt=system_prompt)
+    return Agent(
+        model,
+        toolsets=[capped],
+        system_prompt=system_prompt,
+        max_concurrency=settings.agent_max_concurrency,
+        capabilities=[ProcessHistory(process_history)],
+    )
 
 
 def _usage_limits() -> UsageLimits:

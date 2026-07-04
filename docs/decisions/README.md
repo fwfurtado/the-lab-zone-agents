@@ -17,6 +17,7 @@ repositório cobrem a **estrutura do código e do pipeline**.
 | [0003](0003-borda-go-stdlib-only.md) | Borda Go stdlib-only | Zero deps; métricas Prometheus in-tree; troca por `client_golang` é mecânica se preciso |
 | [0004](0004-caps-agente-por-processo.md) | Orçamento do agente por processo (env) | Mesmo runtime, orçamentos distintos; triagem cruza mais superfícies que QA; calibrar só o que apertou |
 | [0005](0005-ci-unificado-contrato-just.md) | CI unificado: `just`, path-filter, semver/serviço | Um workflow; lint/test via `just`; versão independente por serviço; assimetria consciente no lint |
+| [0006](0006-compressao-de-historico-in-run.md) | Compressão de histórico in-run para tool results antigos | `ProcessHistory` in-process comprime resultados antigos sem quebrar o pareamento `tool_call`/`tool_return` |
 
 ## Decisões relacionadas no `the-lab-zone`
 
