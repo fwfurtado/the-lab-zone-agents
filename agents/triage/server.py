@@ -49,27 +49,33 @@ class _HealthCheckFilter(logging.Filter):
     """Silencia o access log do health check bem-sucedido.
 
     O /readyz da borda Go bate no /healthz do núcleo a cada 15s; sem isto, o
-    access log do aiohttp é 99% ruído de liveness. Filtra APENAS GET /healthz
-    com status 2xx — um health check que começar a FALHAR (5xx) continua
-    aparecendo, que é justamente quando o log importa.
+    access log do aiohttp é 99% ruído de liveness.
 
-    Usa o BaseRequest em record.args["r"] (contrato do AccessLogger do aiohttp)
-    em vez de casar substring na mensagem renderizada — path e status exatos,
-    sem pegar um /triage que por acaso contenha "healthz".
+    IMPORTANTE sobre o mecanismo: o AccessLogger do aiohttp emite a mensagem
+    JÁ RENDERIZADA (logger.info(msg, extra=...)), então record.args fica vazio
+    e os campos vão em atributos do record, não em args. Por isso o filtro casa
+    a request line na mensagem renderizada — no formato default do aiohttp ela
+    aparece como `"GET /healthz HTTP/1.1"` (método, path e versão entre aspas).
+    Casar a string completa com aspas evita pegar um /triage que contenha
+    "healthz" no corpo.
+
+    Filtra APENAS 2xx: um /healthz que comece a FALHAR (5xx) continua no log —
+    é exatamente quando ele importa.
     """
 
+    # Request line exata do health check no formato default do aiohttp.
+    _HEALTHZ_REQUEST_LINE = '"GET /healthz HTTP/1.1"'
+
     def filter(self, record: logging.LogRecord) -> bool:
-        args = record.args
-        if not isinstance(args, dict):
+        msg = record.getMessage()
+        if self._HEALTHZ_REQUEST_LINE not in msg:
             return True
-        request = args.get("r")
-        response = args.get("s")
-        if request is None:
-            return True
-        if request.method == "GET" and request.path == "/healthz":
-            # 's' é o status HTTP (int) no AccessLogger padrão.
-            if response is None or (isinstance(response, int) and 200 <= response < 300):
-                return False
+        # É um /healthz. Silencia só se for 2xx. O status vem logo após a
+        # request line no formato: `"GET /healthz HTTP/1.1" 200 ...`.
+        after = msg.split(self._HEALTHZ_REQUEST_LINE, 1)[1].lstrip()
+        status = after.split(" ", 1)[0] if after else ""
+        if status.startswith("2"):
+            return False
         return True
 
 _SEMAPHORE_KEY = web.AppKey("semaphore", asyncio.Semaphore)
