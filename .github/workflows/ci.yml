@@ -120,7 +120,7 @@ jobs:
         if: matrix.service == 'triage-webhook'
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.5.0
+          version: v2.12.2
           working-directory: services/triage-webhook
 
       # Python: não há action equivalente; o contrato `just lint` (ruff + mypy)

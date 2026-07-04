@@ -5,4 +5,8 @@ uv = "0.11.12"
 # Go: toolchain do serviço triage-webhook (go.mod pede 1.26).
 go = "1.26"
 # Lint Go: agrega vet + staticcheck + errcheck + ineffassign etc.
-golangci-lint = "2.5.0"
+# IMPORTANTE: golangci-lint só analisa código cuja versão de Go (go.mod) seja
+# <= à versão com que ELE foi compilado. Como o go.mod pede go 1.26, precisa
+# de um golangci-lint compilado com go1.26+ (2.12.2 é pós-1.26-GA). Ao subir o
+# go directive, subir esta versão junto — e a `version:` no ci.yml.
+golangci-lint = "2.12.2"
