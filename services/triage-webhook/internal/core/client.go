@@ -59,7 +59,9 @@ func (c *Client) Triage(ctx context.Context, contextText string) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("chamando o núcleo: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Relatórios têm dezenas de KB; 4 MiB é folga, não licença.
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
@@ -90,7 +92,9 @@ func (c *Client) Healthy(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("núcleo inalcançável: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<10))
 
 	if resp.StatusCode != http.StatusOK {

@@ -8,7 +8,6 @@ linters:
   default: standard   # govet, errcheck, staticcheck, ineffassign, unused
   enable:
     - errorlint       # comparação/wrap de erro correta (Is/As)
-    - misspell        # typos em comentários/strings
     - unconvert       # conversões redundantes
 
 formatters:

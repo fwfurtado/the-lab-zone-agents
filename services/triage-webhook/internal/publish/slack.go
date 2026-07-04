@@ -127,7 +127,11 @@ func (p *SlackPublisher) post(ctx context.Context, text, threadTS string) (strin
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
 	// A Web API do Slack devolve 200 mesmo em erro lógico; o campo ok manda.
@@ -136,7 +140,7 @@ func (p *SlackPublisher) post(ctx context.Context, text, threadTS string) (strin
 		return "", fmt.Errorf("resposta do Slack não é JSON (status %d): %w", resp.StatusCode, err)
 	}
 	if !sr.OK {
-		return "", fmt.Errorf("Slack recusou a mensagem: %s", sr.Error)
+		return "", fmt.Errorf("slack recusou a mensagem: %s", sr.Error)
 	}
 	return sr.TS, nil
 }
