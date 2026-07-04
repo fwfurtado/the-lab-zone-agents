@@ -36,16 +36,28 @@ type Config struct {
 	// terminationGracePeriodSeconds do pod deve ser MAIOR que isto para o
 	// shutdown conseguir drenar a triagem em curso.
 	TriageTimeout time.Duration
+
+	// SlackToken é o bot token (xoxb-...) para postar o diagnóstico. Vazio
+	// desliga o SlackPublisher — o serviço segue publicando só no log.
+	SlackToken string
+	// SlackChannel é o canal/ID onde o diagnóstico é postado (ex.: #triage).
+	SlackChannel string
+	// AlertmanagerURL é a base pública do Alertmanager, usada no link "ver
+	// alerta" da mensagem do Slack. Vazio omite o link.
+	AlertmanagerURL string
 }
 
 // Load lê a configuração de env. Erros de parsing abortam o boot — config
 // inválida silenciosamente "corrigida" é pior que crash-loop com mensagem.
 func Load() (Config, error) {
 	cfg := Config{
-		WebhookAddr:   getenv("WEBHOOK_ADDR", ":8080"),
-		MetricsAddr:   getenv("METRICS_ADDR", ":9090"),
-		CoreURL:       getenv("CORE_URL", "http://127.0.0.1:8081/triage"),
-		CoreHealthURL: getenv("CORE_HEALTH_URL", "http://127.0.0.1:8081/healthz"),
+		WebhookAddr:     getenv("WEBHOOK_ADDR", ":8080"),
+		MetricsAddr:     getenv("METRICS_ADDR", ":9090"),
+		CoreURL:         getenv("CORE_URL", "http://127.0.0.1:8081/triage"),
+		CoreHealthURL:   getenv("CORE_HEALTH_URL", "http://127.0.0.1:8081/healthz"),
+		SlackToken:      os.Getenv("SLACK_BOT_TOKEN"),
+		SlackChannel:    getenv("SLACK_CHANNEL", "#triage"),
+		AlertmanagerURL: os.Getenv("ALERTMANAGER_URL"),
 	}
 
 	var err error

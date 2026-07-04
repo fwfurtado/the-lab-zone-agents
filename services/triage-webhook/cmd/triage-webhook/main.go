@@ -64,7 +64,20 @@ func run() error {
 	m := metrics.NewSet(reg)
 	cache := dedup.New(cfg.DedupTTL, nil)
 	coreClient := core.New(cfg.CoreURL, cfg.CoreHealthURL)
-	pub := publish.NewLog(log)
+
+	// Publisher: sempre loga (registro durável no VictoriaLogs); se houver
+	// token de Slack, também posta no canal de triagem. Fan-out best-effort —
+	// um destino que falha não derruba o outro.
+	logPub := publish.NewLog(log)
+	var pub publish.Publisher = logPub
+	if cfg.SlackToken != "" {
+		slackPub := publish.NewSlack(cfg.SlackToken, cfg.SlackChannel, cfg.AlertmanagerURL, log)
+		pub = publish.NewMulti(log, logPub, slackPub)
+		log.Info("SlackPublisher ativo", "channel", cfg.SlackChannel)
+	} else {
+		log.Info("SLACK_BOT_TOKEN ausente; publicando só no log")
+	}
+
 	pool := pipeline.New(cfg.Workers, cfg.QueueSize, cfg.TriageTimeout, coreClient, pub, cache, m, log)
 
 	webhookSrv := server.Webhook(cfg.WebhookAddr, pool, cache, coreClient, m, log)
