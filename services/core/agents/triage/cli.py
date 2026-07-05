@@ -18,6 +18,7 @@ import sys
 from agents.triage.agent import answer
 from shared.config import get_settings
 from shared.log import configure_logging
+from shared.metrics import answer_errors_total, answer_latency, questions_total
 
 logger = logging.getLogger("the_lab_zone_triage.cli")
 
@@ -61,11 +62,20 @@ def main() -> None:
     if not context:
         parser.error("nenhum contexto: passe como argumento ou via stdin (pipe).")
 
+    # Instrumentação no transporte, como Slack (responder.py) e HTTP
+    # (server.py): questions/latency/errors são incrementadas aqui porque o
+    # answer() central não instrumenta — cada transporte o faz, e a CLI ficava
+    # de fora, deixando a latência zerada no --stats. Idealmente a
+    # instrumentação viveria no ponto único (answer()), mas migrar os dois
+    # transportes em produção não se paga agora; segue-se o padrão vigente.
+    questions_total.inc()
     try:
-        report = asyncio.run(answer(context))
+        with answer_latency.time():
+            report = asyncio.run(answer(context))
     except KeyboardInterrupt:
         sys.exit(130)
     except Exception:
+        answer_errors_total.inc()
         logger.exception("falha ao executar a triagem")
         sys.exit(1)
 
