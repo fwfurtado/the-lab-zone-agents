@@ -129,9 +129,22 @@ func (p *Payload) Facts() Facts {
 		}
 	}
 
+	// Namespace representante do grupo, em ordem de preferência:
+	//   1. GroupLabels — o eixo pelo qual o Alertmanager agrupou (group_by).
+	//   2. CommonLabels — comum a todos os alertas do grupo.
+	//   3. Labels do primeiro alerta firing — presente em quase todo alerta k8s
+	//      mesmo quando o grupo NÃO é por namespace (ex.: group_by: [alertname]).
+	// Sem o passo 3, um grupo que não agrupa por namespace produzia namespace
+	// vazio, e a chave de persistência degradava para triage/no-namespace/... —
+	// quebrando o prefixo do Tier 0. O fallback fecha esse buraco para alertas
+	// reais (o passo 3 só não salva um payload que não tem namespace em lugar
+	// nenhum, como um curl de teste sintético).
 	ns := p.GroupLabels["namespace"]
 	if ns == "" {
 		ns = p.CommonLabels["namespace"]
+	}
+	if ns == "" && len(firing) > 0 {
+		ns = firing[0].Labels["namespace"]
 	}
 
 	return Facts{Alertnames: names, Namespace: ns, FiredAt: oldest}

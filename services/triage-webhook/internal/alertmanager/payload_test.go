@@ -163,3 +163,36 @@ func TestFactsNamespaceFallbackCommonLabels(t *testing.T) {
 		t.Errorf("namespace fallback: esperava data, veio %q", got)
 	}
 }
+
+func TestFactsNamespaceFallbackAlertLabels(t *testing.T) {
+	// Grupo NÃO agrupa por namespace (group_by: [alertname]): nem groupLabels
+	// nem commonLabels têm namespace, mas o alerta individual tem. Deve cair
+	// para o label do primeiro firing em vez de "".
+	raw := `{"version":"4","groupKey":"g","status":"firing",
+	  "groupLabels":{"alertname":"CiliumPolicyDrop"},"commonLabels":{"alertname":"CiliumPolicyDrop"},
+	  "alerts":[{"status":"firing","labels":{"alertname":"CiliumPolicyDrop","namespace":"data"},
+	  "startsAt":"2026-07-05T21:19:00Z","fingerprint":"f1"}]}`
+	p, err := Parse(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := p.Facts().Namespace; got != "data" {
+		t.Errorf("namespace fallback p/ label do alerta: esperava data, veio %q", got)
+	}
+}
+
+func TestFactsNamespaceVazioQuandoAusenteEmTudo(t *testing.T) {
+	// Payload sintético sem namespace em lugar nenhum (ex.: curl de teste):
+	// permanece "" — o fallback não inventa namespace onde não há.
+	raw := `{"version":"4","groupKey":"g","status":"firing",
+	  "groupLabels":{},"commonLabels":{},
+	  "alerts":[{"status":"firing","labels":{"alertname":"X"},
+	  "startsAt":"2026-07-05T21:19:00Z","fingerprint":"f1"}]}`
+	p, err := Parse(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := p.Facts().Namespace; got != "" {
+		t.Errorf("esperava namespace vazio, veio %q", got)
+	}
+}
