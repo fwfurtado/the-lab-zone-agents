@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -124,6 +125,51 @@ func TestSlackPublishPostsRootAndDiagnosisInThread(t *testing.T) {
 	}
 	if !strings.Contains(got[1].Text, "diagnóstico detalhado") {
 		t.Fatalf("mensagem no thread deveria conter diagnóstico: %q", got[1].Text)
+	}
+}
+
+func TestSlackPublishRootFailsAbortsButChunkFailureDoesNot(t *testing.T) {
+	// Contrato de erro (ver Publish): a raiz é a ÚNICA post dura. Se a raiz
+	// falha, Publish retorna erro. Se a raiz vai mas um chunk do diagnóstico
+	// falha, Publish NÃO retorna erro — senão a raiz ficaria órfã no canal
+	// ("Diagnóstico completo na thread") apontando pra uma thread vazia.
+
+	newPub := func(rt roundTripFunc) *SlackPublisher {
+		// logger real: o path best-effort de chunk chama p.log.Error; nil
+		// causaria panic (em produção o log nunca é nil).
+		p := NewSlack("t", "#triage", "", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		p.postURL = "http://slack.test/chat.postMessage"
+		p.hc = &http.Client{Transport: rt}
+		return p
+	}
+	okResponse := func(ts string) (*http.Response, error) {
+		body, _ := json.Marshal(slackPostResponse{OK: true, TS: ts})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+			Header:     make(http.Header),
+		}, nil
+	}
+
+	// Caso 1: raiz falha -> Publish retorna erro.
+	rootFails := newPub(func(_ *http.Request) (*http.Response, error) {
+		return nil, io.ErrUnexpectedEOF
+	})
+	if err := rootFails.Publish(context.Background(), Report{Diagnosis: "x"}); err == nil {
+		t.Fatal("raiz falhando deveria abortar Publish com erro")
+	}
+
+	// Caso 2: raiz OK, primeiro (e único) chunk falha -> Publish NÃO aborta.
+	var call int
+	chunkFails := newPub(func(_ *http.Request) (*http.Response, error) {
+		call++
+		if call == 1 {
+			return okResponse("root-ts") // a raiz vai
+		}
+		return nil, io.ErrUnexpectedEOF // o chunk falha
+	})
+	if err := chunkFails.Publish(context.Background(), Report{Diagnosis: "x"}); err != nil {
+		t.Fatalf("falha de chunk após raiz OK não deveria abortar: %v", err)
 	}
 }
 

@@ -82,16 +82,15 @@ func (p *SlackPublisher) Publish(ctx context.Context, r Report) error {
 		return fmt.Errorf("postando notificação de triagem no Slack: %w", err)
 	}
 
-	firstText := header + "\n\n" + chunks[0]
-	if _, err := p.post(ctx, firstText, rootTS); err != nil {
-		return fmt.Errorf("postando diagnóstico no thread do Slack: %w", err)
-	}
-
-	// Continuações: thread da mensagem raiz. Erro aqui é logado, não aborta —
-	// a thread já recebeu o início do diagnóstico.
-	for i, chunk := range chunks[1:] {
+	// Diagnóstico na thread da raiz. Uma vez que a raiz foi postada, a
+	// entrega "aconteceu" do ponto de vista do pipeline (a dedup não é
+	// liberada). Falha de chunk é entrega PARCIAL: logada, não abortiva —
+	// abortar aqui deixaria a raiz órfã no canal ("Diagnóstico completo na
+	// thread") apontando pra uma thread vazia. A raiz é a única post dura.
+	chunks[0] = header + "\n\n" + chunks[0]
+	for i, chunk := range chunks {
 		if _, err := p.post(ctx, chunk, rootTS); err != nil {
-			p.log.Error("falha ao postar continuação do diagnóstico no Slack",
+			p.log.Error("falha ao postar diagnóstico no thread do Slack",
 				"dedup_key", r.DedupKey, "chunk", i+1, "err", err)
 		}
 	}
