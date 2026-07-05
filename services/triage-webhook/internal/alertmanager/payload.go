@@ -129,25 +129,45 @@ func (p *Payload) Facts() Facts {
 		}
 	}
 
-	// Namespace representante do grupo, em ordem de preferência:
-	//   1. GroupLabels — o eixo pelo qual o Alertmanager agrupou (group_by).
-	//   2. CommonLabels — comum a todos os alertas do grupo.
-	//   3. Labels do primeiro alerta firing — presente em quase todo alerta k8s
-	//      mesmo quando o grupo NÃO é por namespace (ex.: group_by: [alertname]).
-	// Sem o passo 3, um grupo que não agrupa por namespace produzia namespace
-	// vazio, e a chave de persistência degradava para triage/no-namespace/... —
-	// quebrando o prefixo do Tier 0. O fallback fecha esse buraco para alertas
-	// reais (o passo 3 só não salva um payload que não tem namespace em lugar
-	// nenhum, como um curl de teste sintético).
-	ns := p.GroupLabels["namespace"]
-	if ns == "" {
-		ns = p.CommonLabels["namespace"]
-	}
-	if ns == "" && len(firing) > 0 {
-		ns = firing[0].Labels["namespace"]
-	}
+	// Namespace representante do grupo. `namespace` NÃO é um label universal do
+	// Alertmanager: cada regra escolhe seus labels. kube-state-metrics emite
+	// `namespace`; Cilium/Hubble emite `source_namespace`/`destination_namespace`
+	// (a regra CiliumPolicyDrop agrupa por esses, sem `namespace`). Procurar só
+	// `namespace` produzia "" para todo alerta de rede — o bug que a chave
+	// triage/no-namespace/... expôs.
+	//
+	// Resolve-se por lista de chaves candidatas, em ordem de preferência, cada
+	// uma buscada nos três escopos (GroupLabels → CommonLabels → 1º firing):
+	//   1. namespace              — o comum (workloads, kube-state-metrics).
+	//   2. destination_namespace  — em drops de rede, o namespace CUJA policy
+	//      dropou: o que o agente investiga e o eixo de recuperação da memória
+	//      ("já triei drop chegando em data?"). Preferido ao source.
+	//   3. source_namespace       — último recurso (origem do tráfego).
+	ns := firstNamespace(p, "namespace", "destination_namespace", "source_namespace")
 
 	return Facts{Alertnames: names, Namespace: ns, FiredAt: oldest}
+}
+
+// firstNamespace devolve o primeiro valor não-vazio entre as chaves candidatas,
+// cada uma buscada em GroupLabels, depois CommonLabels, depois no primeiro
+// alerta firing. Uma chave é totalmente resolvida (nos três escopos) antes de
+// passar à próxima: prefere-se a chave mais canônica onde quer que ela apareça.
+func firstNamespace(p *Payload, keys ...string) string {
+	firing := p.Firing()
+	for _, k := range keys {
+		if v := p.GroupLabels[k]; v != "" {
+			return v
+		}
+		if v := p.CommonLabels[k]; v != "" {
+			return v
+		}
+		if len(firing) > 0 {
+			if v := firing[0].Labels[k]; v != "" {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 // RenderContext monta o texto entregue ao núcleo de triagem. Só fatos do

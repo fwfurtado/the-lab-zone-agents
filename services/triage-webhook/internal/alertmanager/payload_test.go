@@ -196,3 +196,51 @@ func TestFactsNamespaceVazioQuandoAusenteEmTudo(t *testing.T) {
 		t.Errorf("esperava namespace vazio, veio %q", got)
 	}
 }
+
+func TestFactsNamespaceCiliumDestination(t *testing.T) {
+	// CiliumPolicyDrop agrupa por source_namespace/destination_namespace, SEM
+	// label `namespace`. Deve resolver para destination_namespace (o ns cuja
+	// policy dropou — eixo de recuperação da memória).
+	raw := `{"version":"4","groupKey":"g","status":"firing",
+	  "groupLabels":{"source_namespace":"ai","destination_namespace":"data"},
+	  "commonLabels":{"triage":"true"},
+	  "alerts":[{"status":"firing","labels":{"alertname":"CiliumPolicyDrop","source_namespace":"ai","destination_namespace":"data"},
+	  "startsAt":"2026-07-05T23:02:20Z","fingerprint":"f1"}]}`
+	p, err := Parse(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := p.Facts().Namespace; got != "data" {
+		t.Errorf("esperava destination_namespace=data, veio %q", got)
+	}
+}
+
+func TestFactsNamespacePreferenciaCanonica(t *testing.T) {
+	// `namespace` presente ganha de destination_namespace, mesmo que este esteja
+	// num escopo "mais próximo" — a chave mais canônica vence onde quer que apareça.
+	raw := `{"version":"4","groupKey":"g","status":"firing",
+	  "groupLabels":{"destination_namespace":"data"},
+	  "commonLabels":{"namespace":"ai"},
+	  "alerts":[{"status":"firing","labels":{"alertname":"X"},"startsAt":"2026-07-05T23:02:20Z","fingerprint":"f1"}]}`
+	p, err := Parse(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := p.Facts().Namespace; got != "ai" {
+		t.Errorf("`namespace` deveria ganhar de destination_namespace; veio %q", got)
+	}
+}
+
+func TestFactsNamespaceSourceUltimoRecurso(t *testing.T) {
+	// Só source_namespace disponível (sem namespace nem destination): usa source.
+	raw := `{"version":"4","groupKey":"g","status":"firing",
+	  "groupLabels":{"source_namespace":"ai"},"commonLabels":{},
+	  "alerts":[{"status":"firing","labels":{"alertname":"X"},"startsAt":"2026-07-05T23:02:20Z","fingerprint":"f1"}]}`
+	p, err := Parse(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := p.Facts().Namespace; got != "ai" {
+		t.Errorf("esperava source_namespace=ai como último recurso, veio %q", got)
+	}
+}
