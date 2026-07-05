@@ -28,6 +28,7 @@ type SlackPublisher struct {
 	token       string
 	channel     string
 	externalURL string // base do Alertmanager, pro link de volta ao alerta
+	postURL     string
 	hc          *http.Client
 	log         *slog.Logger
 }
@@ -38,6 +39,7 @@ func NewSlack(token, channel, externalURL string, log *slog.Logger) *SlackPublis
 		token:       token,
 		channel:     channel,
 		externalURL: externalURL,
+		postURL:     slackPostURL,
 		hc:          &http.Client{Timeout: 15 * time.Second},
 		log:         log,
 	}
@@ -61,9 +63,9 @@ type slackPostResponse struct {
 	Error string `json:"error"`
 }
 
-// Publish posta o diagnóstico. A primeira mensagem carrega o cabeçalho +
-// primeiro pedaço; as continuações vão em thread da primeira, para o
-// diagnóstico ficar agrupado no canal.
+// Publish posta uma mensagem raiz padronizada no canal e envia o diagnóstico
+// completo dentro da thread dessa raiz. Assim o canal não fica dependente do
+// preview/corte da primeira mensagem longa.
 //
 // Falha de publicação retorna erro (o pipeline loga), mas NÃO deve liberar a
 // chave de dedup: a triagem aconteceu, é problema de entrega. Isso já é
@@ -75,15 +77,18 @@ func (p *SlackPublisher) Publish(ctx context.Context, r Report) error {
 		chunks = []string{"_(diagnóstico vazio)_"}
 	}
 
-	// Primeira mensagem: cabeçalho + primeiro pedaço, sem thread.
-	firstText := header + "\n\n" + chunks[0]
-	rootTS, err := p.post(ctx, firstText, "")
+	rootTS, err := p.post(ctx, p.rootMessage(r), "")
 	if err != nil {
-		return fmt.Errorf("postando diagnóstico no Slack: %w", err)
+		return fmt.Errorf("postando notificação de triagem no Slack: %w", err)
 	}
 
-	// Continuações: thread da primeira mensagem. Erro aqui é logado, não
-	// aborta — a primeira mensagem (a mais importante) já foi entregue.
+	firstText := header + "\n\n" + chunks[0]
+	if _, err := p.post(ctx, firstText, rootTS); err != nil {
+		return fmt.Errorf("postando diagnóstico no thread do Slack: %w", err)
+	}
+
+	// Continuações: thread da mensagem raiz. Erro aqui é logado, não aborta —
+	// a thread já recebeu o início do diagnóstico.
 	for i, chunk := range chunks[1:] {
 		if _, err := p.post(ctx, chunk, rootTS); err != nil {
 			p.log.Error("falha ao postar continuação do diagnóstico no Slack",
@@ -91,6 +96,14 @@ func (p *SlackPublisher) Publish(ctx context.Context, r Report) error {
 		}
 	}
 	return nil
+}
+
+func (p *SlackPublisher) rootMessage(r Report) string {
+	summary := r.Summary
+	if summary == "" {
+		summary = "grupo de alertas"
+	}
+	return fmt.Sprintf("🔍 *Triagem automática* — %s\nDiagnóstico completo na thread.", summary)
 }
 
 // header monta a linha de contexto acima do diagnóstico: resumo legível do
@@ -122,7 +135,7 @@ func (p *SlackPublisher) post(ctx context.Context, text, threadTS string) (strin
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, slackPostURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.postURL, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}

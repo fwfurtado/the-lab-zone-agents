@@ -1,6 +1,11 @@
 package publish
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -69,4 +74,61 @@ func TestSlackHeaderWithAndWithoutURL(t *testing.T) {
 	if strings.Contains(h2, "http") {
 		t.Fatalf("sem externalURL não deveria haver link: %q", h2)
 	}
+}
+
+func TestSlackPublishPostsRootAndDiagnosisInThread(t *testing.T) {
+	var got []slackPostRequest
+	pub := NewSlack("t", "#triage", "https://am.example.com", nil)
+	pub.postURL = "http://slack.test/chat.postMessage"
+	pub.hc = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("método inesperado: %s", r.Method)
+		}
+		var req slackPostRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("request inválido: %v", err)
+		}
+		got = append(got, req)
+		body, err := json.Marshal(slackPostResponse{OK: true, TS: "root-ts"})
+		if err != nil {
+			t.Fatalf("resposta inválida: %v", err)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	err := pub.Publish(context.Background(), Report{
+		Summary:   "KubePodCrashLooping em ai",
+		Diagnosis: "diagnóstico detalhado",
+	})
+	if err != nil {
+		t.Fatalf("Publish retornou erro: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("esperava raiz + mensagem no thread, veio %d", len(got))
+	}
+	if got[0].ThreadTS != "" {
+		t.Fatalf("mensagem raiz não deve ter thread_ts: %q", got[0].ThreadTS)
+	}
+	if !strings.Contains(got[0].Text, "Diagnóstico completo na thread.") {
+		t.Fatalf("mensagem raiz deveria ser padronizada: %q", got[0].Text)
+	}
+	if strings.Contains(got[0].Text, "diagnóstico detalhado") {
+		t.Fatalf("mensagem raiz não deve conter diagnóstico: %q", got[0].Text)
+	}
+	if got[1].ThreadTS != "root-ts" {
+		t.Fatalf("diagnóstico deveria ir no thread da raiz, thread_ts=%q", got[1].ThreadTS)
+	}
+	if !strings.Contains(got[1].Text, "diagnóstico detalhado") {
+		t.Fatalf("mensagem no thread deveria conter diagnóstico: %q", got[1].Text)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }
