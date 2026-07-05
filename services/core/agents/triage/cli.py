@@ -43,6 +43,15 @@ def main() -> None:
         nargs="?",
         help="Contexto do alerta/sintoma. Se omitido, lê do stdin.",
     )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help=(
+            "Ao fim da run, imprime no stderr as estatísticas da execução "
+            "(latência, compressão de histórico da Fase C). Útil para calibrar "
+            "HISTORY_KEEP_RECENT_TOOL_RESULTS. Não afeta o stdout (o relatório)."
+        ),
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -61,6 +70,12 @@ def main() -> None:
         sys.exit(1)
 
     print(report)
+
+    if args.stats:
+        # stderr: não polui o stdout (relatório) que pode estar sendo pipeado.
+        from shared.metrics import render_run_stats
+
+        print(render_run_stats(), file=sys.stderr)
 
 
 if __name__ == "__main__":
