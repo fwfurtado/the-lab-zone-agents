@@ -131,3 +131,35 @@ func TestSummaryWithoutNamespace(t *testing.T) {
 		t.Fatalf("sem namespace deveria ser só o nome: %q", got)
 	}
 }
+
+func TestFacts(t *testing.T) {
+	f := parseSample(t).Facts()
+
+	// Só o alerta firing conta (o resolved KubePodNotReady é ignorado).
+	if len(f.Alertnames) != 1 || f.Alertnames[0] != "KubePodCrashLooping" {
+		t.Errorf("alertnames: esperava [KubePodCrashLooping], veio %v", f.Alertnames)
+	}
+	if f.Namespace != "ai" {
+		t.Errorf("namespace: esperava ai, veio %q", f.Namespace)
+	}
+	// FiredAt é o startsAt do firing (18:00), não o do resolved (17:00).
+	want := time.Date(2026, 7, 3, 18, 0, 0, 0, time.UTC)
+	if !f.FiredAt.Equal(want) {
+		t.Errorf("fired_at: esperava %v, veio %v", want, f.FiredAt)
+	}
+}
+
+func TestFactsNamespaceFallbackCommonLabels(t *testing.T) {
+	// Sem namespace em groupLabels, cai pro commonLabels.
+	raw := `{"version":"4","groupKey":"g","status":"firing",
+	  "groupLabels":{},"commonLabels":{"namespace":"data"},
+	  "alerts":[{"status":"firing","labels":{"alertname":"X","namespace":"data"},
+	  "startsAt":"2026-07-05T10:00:00Z","fingerprint":"f1"}]}`
+	p, err := Parse(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := p.Facts().Namespace; got != "data" {
+		t.Errorf("namespace fallback: esperava data, veio %q", got)
+	}
+}

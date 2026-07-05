@@ -65,18 +65,38 @@ func run() error {
 	cache := dedup.New(cfg.DedupTTL, nil)
 	coreClient := core.New(cfg.CoreURL, cfg.CoreHealthURL)
 
-	// Publisher: sempre loga (registro durável no VictoriaLogs); se houver
-	// token de Slack, também posta no canal de triagem. Fan-out best-effort —
-	// um destino que falha não derruba o outro.
-	logPub := publish.NewLog(log)
-	var pub publish.Publisher = logPub
+	// Publisher: sempre loga (registro durável no VictoriaLogs); Slack e Garage
+	// são destinos OPCIONAIS que se somam quando configurados. Fan-out
+	// best-effort — um destino que falha não derruba os outros nem a triagem.
+	publishers := []publish.Publisher{publish.NewLog(log)}
+
 	if cfg.SlackToken != "" {
-		slackPub := publish.NewSlack(cfg.SlackToken, cfg.SlackChannel, cfg.AlertmanagerURL, log)
-		pub = publish.NewMulti(log, logPub, slackPub)
+		publishers = append(publishers, publish.NewSlack(cfg.SlackToken, cfg.SlackChannel, cfg.AlertmanagerURL, log))
 		log.Info("SlackPublisher ativo", "channel", cfg.SlackChannel)
 	} else {
-		log.Info("SLACK_BOT_TOKEN ausente; publicando só no log")
+		log.Info("SLACK_BOT_TOKEN ausente; sem publicação no Slack")
 	}
+
+	if cfg.GarageEndpoint != "" {
+		garagePub, err := publish.NewGarage(publish.GarageConfig{
+			Endpoint:  cfg.GarageEndpoint,
+			AccessKey: cfg.GarageAccessKey,
+			SecretKey: cfg.GarageSecretKey,
+			Bucket:    cfg.GarageBucket,
+			Region:    cfg.GarageRegion,
+			UseSSL:    cfg.GarageUseSSL,
+		}, log)
+		if err != nil {
+			return fmt.Errorf("configurando GaragePublisher: %w", err)
+		}
+		publishers = append(publishers, garagePub)
+		log.Info("GaragePublisher ativo (persistência Fase D)", "bucket", cfg.GarageBucket, "endpoint", cfg.GarageEndpoint)
+	} else {
+		log.Info("GARAGE_ENDPOINT ausente; triagens não serão persistidas")
+	}
+
+	// NewMulti é nil-safe e agrega; com um só publisher ainda entrega o contrato.
+	pub := publish.NewMulti(log, publishers...)
 
 	pool := pipeline.New(cfg.Workers, cfg.QueueSize, cfg.TriageTimeout, coreClient, pub, cache, m, log)
 

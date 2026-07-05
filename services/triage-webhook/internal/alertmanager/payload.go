@@ -94,6 +94,49 @@ func (p *Payload) DedupKey() string {
 	return hex.EncodeToString(h[:16])
 }
 
+// Facts são os fatos estruturados do grupo de alertas, extraídos VERBATIM do
+// payload (Fase D). Diferente de Summary/RenderContext, que produzem texto,
+// Facts carrega os campos crus para o front-matter da persistência — sem
+// achatar em prosa e sem passar por nenhuma heurística. São autoritativos: o
+// diagnóstico do modelo nunca é fonte destes valores.
+type Facts struct {
+	// Alertnames são os alertnames distintos do grupo, na ordem de aparição.
+	// Lista porque um grupo pode conter mais de um alertname.
+	Alertnames []string
+	// Namespace é o namespace representante do grupo (GroupLabels, com fallback
+	// para CommonLabels). Vazio se o grupo não tem namespace.
+	Namespace string
+	// FiredAt é o startsAt do alerta firing mais antigo — o início do incidente.
+	FiredAt time.Time
+}
+
+// Facts extrai os fatos estruturados do grupo firing. Reusa a mesma regra de
+// "namespace representante" do Summary (GroupLabels → CommonLabels), para os
+// dois não divergirem.
+func (p *Payload) Facts() Facts {
+	firing := p.Firing()
+
+	var names []string
+	seen := make(map[string]bool)
+	var oldest time.Time
+	for _, a := range firing {
+		if n := a.Labels["alertname"]; n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+		if oldest.IsZero() || a.StartsAt.Before(oldest) {
+			oldest = a.StartsAt
+		}
+	}
+
+	ns := p.GroupLabels["namespace"]
+	if ns == "" {
+		ns = p.CommonLabels["namespace"]
+	}
+
+	return Facts{Alertnames: names, Namespace: ns, FiredAt: oldest}
+}
+
 // RenderContext monta o texto entregue ao núcleo de triagem. Só fatos do
 // alerta — o formato do diagnóstico é responsabilidade do system prompt do
 // agente, não daqui.

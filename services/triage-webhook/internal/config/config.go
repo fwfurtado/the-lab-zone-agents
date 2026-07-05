@@ -45,6 +45,17 @@ type Config struct {
 	// AlertmanagerURL é a base pública do Alertmanager, usada no link "ver
 	// alerta" da mensagem do Slack. Vazio omite o link.
 	AlertmanagerURL string
+
+	// Garage* configuram a persistência da triagem no object store
+	// S3-compatível (Fase D). GarageEndpoint vazio DESLIGA o GaragePublisher —
+	// o serviço segue publicando no log/Slack, sem persistir. Manter a
+	// persistência opcional evita acoplar o boot da borda ao object store.
+	GarageEndpoint  string
+	GarageAccessKey string
+	GarageSecretKey string
+	GarageBucket    string
+	GarageRegion    string
+	GarageUseSSL    bool
 }
 
 // Load lê a configuração de env. Erros de parsing abortam o boot — config
@@ -58,9 +69,17 @@ func Load() (Config, error) {
 		SlackToken:      os.Getenv("SLACK_BOT_TOKEN"),
 		SlackChannel:    getenv("SLACK_CHANNEL", "#triage"),
 		AlertmanagerURL: os.Getenv("ALERTMANAGER_URL"),
+		GarageEndpoint:  os.Getenv("GARAGE_ENDPOINT"),
+		GarageAccessKey: os.Getenv("GARAGE_ACCESS_KEY"),
+		GarageSecretKey: os.Getenv("GARAGE_SECRET_KEY"),
+		GarageBucket:    getenv("GARAGE_BUCKET", "the-lab-zone-triage"),
+		GarageRegion:    getenv("GARAGE_REGION", "garage"),
 	}
 
 	var err error
+	if cfg.GarageUseSSL, err = getbool("GARAGE_USE_SSL", false); err != nil {
+		return Config{}, err
+	}
 	if cfg.Workers, err = getint("WORKERS", 2); err != nil {
 		return Config{}, err
 	}
@@ -100,6 +119,18 @@ func getint(key string, def int) (int, error) {
 		return 0, fmt.Errorf("%s inválido (%q): %w", key, v, err)
 	}
 	return n, nil
+}
+
+func getbool(key string, def bool) (bool, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return def, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("%s inválido (%q): %w", key, v, err)
+	}
+	return b, nil
 }
 
 func getdur(key string, def time.Duration) (time.Duration, error) {

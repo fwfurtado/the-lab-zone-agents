@@ -29,6 +29,13 @@ type Job struct {
 	Summary  string // resumo legível p/ o título da notificação
 	Context  string
 	Received time.Time
+
+	// Fatos de alerta estruturados (Fase D), propagados verbatim do payload
+	// para o front-matter da persistência. Não usados na execução da triagem;
+	// carregados aqui porque o payload não sobrevive até o publisher.
+	Alertnames []string
+	Namespace  string
+	FiredAt    time.Time
 }
 
 // Triager executa uma triagem (implementado por core.Client).
@@ -169,11 +176,15 @@ func (p *Pool) process(ctx context.Context, log *slog.Logger, job Job) {
 
 	log.Info("triagem concluída", "dedup_key", job.DedupKey, "elapsed", elapsed.String())
 	if err := p.pub.Publish(runCtx, publish.Report{
-		DedupKey:  job.DedupKey,
-		GroupKey:  job.GroupKey,
-		Summary:   job.Summary,
-		Context:   job.Context,
-		Diagnosis: report,
+		DedupKey:   job.DedupKey,
+		GroupKey:   job.GroupKey,
+		Summary:    job.Summary,
+		Context:    job.Context,
+		Diagnosis:  report,
+		Alertnames: job.Alertnames,
+		Namespace:  job.Namespace,
+		FiredAt:    job.FiredAt,
+		TriagedAt:  time.Now(),
 	}); err != nil {
 		log.Error("publicação do diagnóstico falhou", "dedup_key", job.DedupKey, "err", err)
 	}

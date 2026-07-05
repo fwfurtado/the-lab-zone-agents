@@ -9,11 +9,16 @@ package publish
 import (
 	"context"
 	"log/slog"
+	"time"
 )
 
 // Report é o resultado de uma triagem pronto para publicação.
 type Report struct {
 	// DedupKey identifica o grupo triado (correlaciona com os logs de ingest).
+	// É também a identidade estável do incidente na persistência (Fase D): já
+	// combina groupKey + fingerprints + startsAt, então distingue o mesmo
+	// alertname re-disparando depois de resolver (incidente novo) de um simples
+	// reenvio (mesma chave).
 	DedupKey string
 	// GroupKey é o groupKey original do Alertmanager (correlação técnica).
 	GroupKey string
@@ -23,6 +28,15 @@ type Report struct {
 	Context string
 	// Diagnosis é o relatório produzido pelo agente.
 	Diagnosis string
+
+	// Fatos de alerta estruturados (Fase D), verbatim do payload. Para o
+	// front-matter da persistência; o SlackPublisher/LogPublisher os ignoram.
+	Alertnames []string
+	Namespace  string
+	// FiredAt é o início do incidente (startsAt do alerta mais antigo).
+	FiredAt time.Time
+	// TriagedAt é quando a triagem concluiu (carimbo do publisher).
+	TriagedAt time.Time
 }
 
 // Publisher entrega o diagnóstico ao destino.

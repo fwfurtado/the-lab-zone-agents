@@ -54,12 +54,16 @@ func Webhook(addr string, pool *pipeline.Pool, cache *dedup.Cache, coreClient *c
 			return
 		}
 
+		facts := payload.Facts()
 		job := pipeline.Job{
-			DedupKey: key,
-			GroupKey: payload.GroupKey,
-			Summary:  payload.Summary(),
-			Context:  payload.RenderContext(),
-			Received: time.Now(),
+			DedupKey:   key,
+			GroupKey:   payload.GroupKey,
+			Summary:    payload.Summary(),
+			Context:    payload.RenderContext(),
+			Received:   time.Now(),
+			Alertnames: facts.Alertnames,
+			Namespace:  facts.Namespace,
+			FiredAt:    facts.FiredAt,
 		}
 		if !pool.TryEnqueue(job) {
 			// Fila cheia: 429 e o Alertmanager reenvia. IMPORTANTE: a chave já
