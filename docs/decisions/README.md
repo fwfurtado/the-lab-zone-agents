@@ -18,6 +18,12 @@ repositório cobrem a **estrutura do código e do pipeline**.
 | [0004](0004-caps-agente-por-processo.md) | Orçamento do agente por processo (env) | Mesmo runtime, orçamentos distintos; triagem cruza mais superfícies que QA; calibrar só o que apertou |
 | [0005](0005-ci-unificado-contrato-just.md) | CI unificado: `just`, path-filter, semver/serviço | Um workflow; lint/test via `just`; versão independente por serviço; assimetria consciente no lint |
 | [0006](0006-compressao-de-historico-in-run.md) | Compressão de histórico in-run para tool results antigos | `ProcessHistory` in-process comprime resultados antigos sem quebrar o pareamento `tool_call`/`tool_return` |
+| [0007](0007-persistencia-triagem-garage.md) | Persistência da triagem no Garage | Relatório imutável como fonte de verdade S3; emenda o stdlib-only da borda para o cliente de object store |
+| [0008](0008-extracao-conclusoes-adiada.md) | Extração de verdict/confidence adiada | Não-decisão deliberada; classificador de 2ª passada quando extrair (Fatia B) |
+| [0009](0009-memoria-duas-collections.md) | Memória em duas collections (gestalt + facetas) | `triage_incidents` (regressão, 1 ponto/relatório) e `triage_facets` (hint, 1 ponto/seção); mesmo e5-large |
+| [0010](0010-indexer-um-codebase-dois-entrypoints.md) | Indexer: um code base, dois entrypoints | Núcleo comum + `gestalt`/`facets`; parser num lugar só; mistune para seção, scan para preâmbulo |
+| [0011](0011-job-indexer-dag-pvc-efemero.md) | Job do indexer: dag + PVC efêmero | Pods separados (não containerSet, que exige `main` único); PVC efêmero cruza pods; retry por-step |
+| [0012](0012-consumo-dois-mcps-filtro-nomeado.md) | Consumo: dois MCPs upstream com filtro nomeado | `FILTERABLE_FIELDS` via ConfigMap/`envFrom`; `name` sem prefixo `metadata.`; becos evitados documentados |
 
 ## Decisões relacionadas no `the-lab-zone`
 
