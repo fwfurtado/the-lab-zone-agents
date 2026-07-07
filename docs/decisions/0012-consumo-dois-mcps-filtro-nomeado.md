@@ -81,3 +81,8 @@ no vMCP de triagem com `excludeAll: false` (o `qdrant-mcp` do QA segue excluído
   risco teórico, aconteceu em produção.
 - Payload indexes (criados pelo indexer em `_ensure_collection`) são o que
   HABILITA o filtro performático no Qdrant — a contraparte de escrita deste ADR.
+- OPERACIONAL: o `FILTERABLE_FIELDS` vem por `envFrom` (ConfigMap), resolvido no
+  start do container. Mudá-lo exige reiniciar o **StatefulSet backend** do MCP
+  (não o Deployment do proxy runner) — ver `docs/runbooks/recarregar-config-mcp-toolhive.md`.
+  Caminhos automáticos (restart nativo, resourceOverrides, Reloader, MCPRemoteProxy)
+  foram investigados e descartados; o runbook registra por quê.
