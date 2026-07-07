@@ -28,8 +28,10 @@ Filtro **nomeado** via `FILTERABLE_FIELDS` (não arbitrary filter, não código
 custom, não achatamento de payload). Cada instância declara seus campos
 filtráveis; as `description` viram doc da tool que guia o agente:
 
-- `triage-incidents-mcp` → `namespace`(==), `alertnames`(any), `confirmation`(!=).
-- `triage-facets-mcp` → `section`(==), `namespace`(==), `confirmation`(!=).
+- `triage-incidents-mcp` → `namespace`(==), `alertnames`(any).
+- `triage-facets-mcp` → `section`(==), `namespace`(==).
+
+(`confirmation` fez parte da versão inicial mas foi removido — ver Consequências.)
 
 Ambas read-only (`QDRANT_READ_ONLY`), e5-large, grupo `lab-readonly`, agregadas
 no vMCP de triagem com `excludeAll: false` (o `qdrant-mcp` do QA segue excluído).
@@ -63,12 +65,19 @@ no vMCP de triagem com `excludeAll: false` (o `qdrant-mcp` do QA segue excluído
   nomeado por env resolve sem código.
 
 ## Consequências
-- O filtro `confirmation` (condition `!=`) é semanticamente "o valor passado é o
-  EXCLUÍDO" — passar `refuted` mantém unverified/confirmed. Contraintuitivo; o
-  system prompt instrui `confirmation: "refuted"` explicitamente.
-- O filtro `confirmation` está pronto mas **dormente**: todo relatório hoje é
-  `unverified`, então ele só ganha efeito prático quando a Fatia B introduzir
-  `confirmed`/`refuted`. Reabrir então a semântica `!=` vs. `any` (a inversão
-  confunde humano e LLM).
+- O filtro `confirmation` (condition `!=`) FOI REMOVIDO dos campos filtráveis
+  (2026-07). Motivo: numa triagem real (drop-test), o agente passou
+  `confirmation: "unverified"` nas 4 buscas e ZEROU todas — o `!=` exclui o valor
+  passado, e como todo relatório é `unverified`, isso excluía tudo. O agente
+  racionalizou "quero os não-verificados" e passou o valor literal, caindo na
+  inversão semântica (confirmado no trace do Langfuse). O system prompt instruía
+  `refuted`, mas a instrução contraintuitiva não segurou o modelo. Como o campo
+  era **dormente** (nenhum relatório é confirmed/refuted até a Fatia B), removê-lo
+  não perdeu recuperação e eliminou a armadilha na raiz (o agente não pode passar
+  um campo fora do schema da tool), não só no prompt.
+- LIÇÃO para a Fatia B: quando `confirmation` ganhar valores variados e voltar a
+  ser filtrável, usar condition `any` (valor positivo: "me dê os confirmed"), NUNCA
+  `!=`. A semântica "o valor passado é o excluído" confunde humano E LLM — não é
+  risco teórico, aconteceu em produção.
 - Payload indexes (criados pelo indexer em `_ensure_collection`) são o que
   HABILITA o filtro performático no Qdrant — a contraparte de escrita deste ADR.
