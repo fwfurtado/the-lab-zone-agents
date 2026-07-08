@@ -153,26 +153,45 @@ class Assistant:
         message_history = history or []
         limits = _usage_limits()
 
-        async with agent:
-            if on_delta is None:
-                result = await agent.run(
-                    question,
-                    message_history=message_history,
-                    usage_limits=limits,
-                )
-                return result.output
-
-            # Streaming via agent.iter iterando nós — evita o cancelamento de
-            # tool call no meio que run_stream+stream_text causava. Não trocar.
-            async with agent.iter(
-                question,
-                message_history=message_history,
-                usage_limits=limits,
-            ) as run:
-                async for node in run:
-                    if agent.is_model_request_node(node):
-                        async with node.stream(run.ctx) as stream:
-                            async for delta in stream.stream_text(delta=True):
-                                if delta:
-                                    await on_delta(delta)
-                return run.result.output if run.result else ""
+        # output é capturado DENTRO do `async with agent:`; o retorno vem DEPOIS.
+        # Se SÓ o teardown do toolset MCP falhar (ex.: RemoteProtocolError do vMCP
+        # ao fechar a sessão streamable-HTTP — race conhecido do fastmcp), a run
+        # JÁ concluiu: logamos e devolvemos o resultado em vez de descartá-lo (e
+        # re-triar à toa). Se a própria run falhou, output continua None e o erro
+        # propaga. except Exception não pega CancelledError (BaseException), então
+        # o shutdown não é engolido; o guard evita esconder falha real de run.
+        output: str | None = None
+        try:
+            async with agent:
+                if on_delta is None:
+                    result = await agent.run(
+                        question,
+                        message_history=message_history,
+                        usage_limits=limits,
+                    )
+                    output = result.output
+                else:
+                    # Streaming via agent.iter iterando nós — evita o cancelamento
+                    # de tool call no meio que run_stream+stream_text causava.
+                    # Não trocar.
+                    async with agent.iter(
+                        question,
+                        message_history=message_history,
+                        usage_limits=limits,
+                    ) as run:
+                        async for node in run:
+                            if agent.is_model_request_node(node):
+                                async with node.stream(run.ctx) as stream:
+                                    async for delta in stream.stream_text(delta=True):
+                                        if delta:
+                                            await on_delta(delta)
+                        output = run.result.output if run.result else ""
+        except Exception:
+            if output is None:
+                raise
+            logger.warning(
+                "teardown do toolset falhou após a run concluir; devolvendo o resultado",
+                exc_info=True,
+            )
+        assert output is not None  # sem exceção output foi setado; com exceção+None já propagou
+        return output
