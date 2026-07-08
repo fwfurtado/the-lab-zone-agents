@@ -31,10 +31,21 @@ func New(url, healthURL string) *Client {
 	// otelhttp injeta traceparent + baggage nas chamadas ao núcleo (via o
 	// propagador global) e cria um span-cliente por request. Com o tracing
 	// desligado (provider/propagador no-op), é passthrough — nada é injetado.
+	//
+	// WithFilter EXCLUI o healthcheck: o /readyz da borda pole GET /healthz a
+	// cada ~15s e, sem trace pai, cada poll viraria um trace ÓRFÃO — floodando
+	// o Langfuse (foi o pico de "HTTP GET" observado). Só o POST /triage é
+	// traçado; o healthcheck não vira span algum.
+	transport := otelhttp.NewTransport(
+		http.DefaultTransport,
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			return r.URL.Path != "/healthz"
+		}),
+	)
 	return &Client{
 		url:       url,
 		healthURL: healthURL,
-		hc:        &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
+		hc:        &http.Client{Transport: transport},
 	}
 }
 
