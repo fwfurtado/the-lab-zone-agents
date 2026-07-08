@@ -1,7 +1,8 @@
 import logging
 from functools import lru_cache
+from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr
+from pydantic import BeforeValidator, Field, SecretStr
 from pydantic.functional_validators import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -53,7 +54,12 @@ class Settings(BaseSettings):
     otel_environment: str = Field(default="prod", alias="OTEL_ENVIRONMENT")
     # version FIXA do semconv GenAI do pydantic-ai: não depender do default, que
     # muda entre releases (2-4 são compat deprecado; 5 é o atual em 2.1.0).
-    otel_semconv_version: int = Field(default=5, alias="OTEL_SEMCONV_VERSION")
+    # Literal para casar com o param `version` do InstrumentationSettings (mypy);
+    # BeforeValidator(int) coage o env string e rejeita valor fora de {2,3,4,5}
+    # no boot (parsing estrito da casa).
+    otel_semconv_version: Annotated[Literal[2, 3, 4, 5], BeforeValidator(int)] = Field(
+        default=5, alias="OTEL_SEMCONV_VERSION"
+    )
 
     log_level: int = Field(default=logging.INFO, alias="LOG_LEVEL")
 
