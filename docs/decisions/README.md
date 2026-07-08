@@ -24,6 +24,7 @@ repositório cobrem a **estrutura do código e do pipeline**.
 | [0010](0010-indexer-um-codebase-dois-entrypoints.md) | Indexer: um code base, dois entrypoints | Núcleo comum + `gestalt`/`facets`; parser num lugar só; mistune para seção, scan para preâmbulo |
 | [0011](0011-job-indexer-dag-pvc-efemero.md) | Job do indexer: dag + PVC efêmero | Pods separados (não containerSet, que exige `main` único); PVC efêmero cruza pods; retry por-step |
 | [0012](0012-consumo-dois-mcps-filtro-nomeado.md) | Consumo: dois MCPs upstream com filtro nomeado | `FILTERABLE_FIELDS` via ConfigMap/`envFrom`; `name` sem prefixo `metadata.`; becos evitados documentados |
+| [0013](0013-conclusoes-artefato-garage.md) | Conclusões como artefato próprio no Garage | Emenda o 0008: `conclusions/…md` irmão do relatório; Qdrant 100% derivável; union discriminado (Diagnosed/Inconclusive) |
 
 ## Decisões relacionadas no `the-lab-zone`
 

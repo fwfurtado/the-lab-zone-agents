@@ -2,11 +2,19 @@
 tipo: adr
 numero: 8
 titulo: Extração de verdict/confidence adiada para o job de embed (classificador)
-status: aceito
-relacionado: [0007-persistencia-triagem-garage, 0006-compressao-de-historico-in-run]
+status: aceito (emendado pelo ADR-0013)
+relacionado: [0007-persistencia-triagem-garage, 0006-compressao-de-historico-in-run, 0013-conclusoes-artefato-garage]
 ---
 
 # ADR-0008 — Extração de conclusões (verdict/confidence) adiada
+
+> **EMENDA (ADR-0013):** a decisão de *adiar* a extração e de usar um
+> *classificador de segunda passada* continua válida. O que mudou foi **onde as
+> conclusões são persistidas**: não no payload do Qdrant durante a indexação
+> ("no job de embed", como a leitura natural deste ADR sugeria), mas num
+> **artefato próprio no Garage** (`conclusions/…`), irmão do relatório. Motivo:
+> conclusões no Qdrant quebram a invariante de que o Qdrant é destruível e
+> reconstruível sem reclassificar. Ver ADR-0013.
 
 ## Status
 Aceito como **não-decisão deliberada**. Registra por que a v1 da persistência
