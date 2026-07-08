@@ -41,6 +41,7 @@ from shared.metrics import (
     questions_total,
     start_metrics_server,
 )
+from shared.observability import configure_observability
 
 logger = logging.getLogger("the_lab_zone_triage.server")
 
@@ -135,6 +136,7 @@ def main() -> None:
     # melhor crash-loop com mensagem clara do que 500 na primeira triagem.
     settings = get_settings()
     configure_logging(settings.log_level)
+    configure_observability()  # TracerProvider + instrument_all (no-op se OTEL_ENABLED=false)
 
     host = os.environ.get("TRIAGE_BIND_HOST", "127.0.0.1")
     port = _env_int("TRIAGE_BIND_PORT", 8081)

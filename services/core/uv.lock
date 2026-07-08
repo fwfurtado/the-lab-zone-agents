@@ -2397,6 +2397,8 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "async-lru" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
     { name = "prometheus-client" },
     { name = "pydantic-ai" },
     { name = "pydantic-settings" },
@@ -2415,6 +2417,8 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.13" },
     { name = "async-lru", specifier = ">=2.0.4" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.42.1" },
+    { name = "opentelemetry-sdk", specifier = ">=1.42.1" },
     { name = "prometheus-client", specifier = ">=0.25.0" },
     { name = "pydantic-ai", specifier = ">=2.1.0" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },

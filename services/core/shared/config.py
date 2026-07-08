@@ -42,6 +42,19 @@ class Settings(BaseSettings):
         alias="HISTORY_KEEP_RECENT_TOOL_RESULTS",
     )
 
+    # --- Observabilidade OTel (inversão: instrumentação na app, não no gateway
+    # LiteLLM). O endpoint/protocolo do exporter vêm das envs padrão do OTel
+    # (OTEL_EXPORTER_OTLP_ENDPOINT etc.), lidas direto pelo SDK. ---
+    # Gate: permite rodar CLI/CI local sem exigir um Collector no ar.
+    otel_enabled: bool = Field(default=True, alias="OTEL_ENABLED")
+    # service.name distingue os domínios no projeto único do Langfuse. MESMO
+    # código serve triagem e QA; cada Deployment seta o seu (triage-agent/qa-bot).
+    otel_service_name: str = Field(default="the-lab-zone-agent", alias="OTEL_SERVICE_NAME")
+    otel_environment: str = Field(default="prod", alias="OTEL_ENVIRONMENT")
+    # version FIXA do semconv GenAI do pydantic-ai: não depender do default, que
+    # muda entre releases (2-4 são compat deprecado; 5 é o atual em 2.1.0).
+    otel_semconv_version: int = Field(default=5, alias="OTEL_SEMCONV_VERSION")
+
     log_level: int = Field(default=logging.INFO, alias="LOG_LEVEL")
 
     @field_validator("log_level", mode="before")

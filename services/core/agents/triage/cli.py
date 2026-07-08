@@ -19,6 +19,7 @@ from agents.triage.agent import answer
 from shared.config import get_settings
 from shared.log import configure_logging
 from shared.metrics import answer_errors_total, answer_latency, questions_total
+from shared.observability import configure_observability
 
 logger = logging.getLogger("the_lab_zone_triage.cli")
 
@@ -57,6 +58,7 @@ def main() -> None:
 
     settings = get_settings()
     configure_logging(settings.log_level)  # logs -> stderr; relatório -> stdout
+    configure_observability()  # TracerProvider + instrument_all (no-op se OTEL_ENABLED=false)
 
     context = _read_context(args.context)
     if not context:
