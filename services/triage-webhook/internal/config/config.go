@@ -56,6 +56,13 @@ type Config struct {
 	GarageBucket    string
 	GarageRegion    string
 	GarageUseSSL    bool
+
+	// OTel* configuram o tracing (inversão da observabilidade de IA). A borda
+	// ENRAÍZA o trace e propaga contexto W3C ao núcleo Python. Endpoint e
+	// protocolo do exporter vêm das envs padrão OTEL_EXPORTER_OTLP_*.
+	OTelEnabled     bool   // OTEL_ENABLED (default true); false desliga o tracing
+	OTelServiceName string // OTEL_SERVICE_NAME (default triage-webhook)
+	OTelEnvironment string // OTEL_ENVIRONMENT (default prod)
 }
 
 // Load lê a configuração de env. Erros de parsing abortam o boot — config
@@ -74,10 +81,15 @@ func Load() (Config, error) {
 		GarageSecretKey: os.Getenv("GARAGE_SECRET_KEY"),
 		GarageBucket:    getenv("GARAGE_BUCKET", "the-lab-zone-triage"),
 		GarageRegion:    getenv("GARAGE_REGION", "garage"),
+		OTelServiceName: getenv("OTEL_SERVICE_NAME", "triage-webhook"),
+		OTelEnvironment: getenv("OTEL_ENVIRONMENT", "prod"),
 	}
 
 	var err error
 	if cfg.GarageUseSSL, err = getbool("GARAGE_USE_SSL", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.OTelEnabled, err = getbool("OTEL_ENABLED", true); err != nil {
 		return Config{}, err
 	}
 	if cfg.Workers, err = getint("WORKERS", 2); err != nil {

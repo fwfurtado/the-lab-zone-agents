@@ -15,12 +15,59 @@ package pipeline
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/codes"
 
 	"github.com/fwfurtado/the-lab-zone-agents/services/triage-webhook/internal/metrics"
 	"github.com/fwfurtado/the-lab-zone-agents/services/triage-webhook/internal/publish"
 )
+
+// tracer da borda. Sem TracerProvider configurado (ex.: testes que não chamam
+// observability.Setup), otel.Tracer devolve um tracer no-op e tudo abaixo vira
+// inerte — nenhum span é gravado, nenhum panic.
+var tracer = otel.Tracer("triage-webhook/pipeline")
+
+// traceName é o nome de domínio do trace (vira o nome no Langfuse via
+// langfuse.trace.name). Mantemos o NOME do span raiz baixo em cardinalidade
+// ("triage", bom para spanmetrics) e passamos o descritivo por atributo.
+func traceName(job Job) string {
+	if len(job.Alertnames) > 0 {
+		return "triage:" + job.Alertnames[0]
+	}
+	return "triage"
+}
+
+// withTriageBaggage injeta os atributos de domínio como OTel Baggage no
+// contexto, ANTES de abrir o span raiz. A baggage propaga in-process e via
+// header W3C para o núcleo Python, onde um BaggageSpanProcessor os carimba em
+// todos os spans (agent run, model request, tool calls).
+func withTriageBaggage(ctx context.Context, job Job) context.Context {
+	members := make([]baggage.Member, 0, 4)
+	add := func(k, v string) {
+		if v == "" {
+			return
+		}
+		if m, err := baggage.NewMember(k, v); err == nil {
+			members = append(members, m)
+		}
+	}
+	add("langfuse.session.id", job.DedupKey) // agrupa re-triagens do mesmo incidente
+	add("langfuse.trace.name", traceName(job))
+	add("thelabzone.alertname", strings.Join(job.Alertnames, ","))
+	add("thelabzone.namespace", job.Namespace)
+
+	bag, err := baggage.New(members...)
+	if err != nil {
+		return ctx
+	}
+	return baggage.ContextWithBaggage(ctx, bag)
+}
 
 // Job é uma triagem aguardando execução.
 type Job struct {
@@ -153,6 +200,20 @@ func (p *Pool) process(ctx context.Context, log *slog.Logger, job Job) {
 	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.timeout)
 	defer cancel()
 
+	// A borda ENRAÍZA o trace: baggage de domínio ANTES do span raiz, para o
+	// span (e os descendentes no núcleo Python, via traceparent) já nascerem
+	// carimbados. O span também carrega os atributos localmente (a borda não
+	// roda um BaggageSpanProcessor; são poucos spans, então é explícito).
+	runCtx = withTriageBaggage(runCtx, job)
+	runCtx, span := tracer.Start(runCtx, "triage")
+	span.SetAttributes(
+		attribute.String("langfuse.trace.name", traceName(job)),
+		attribute.String("langfuse.session.id", job.DedupKey),
+		attribute.String("thelabzone.alertname", strings.Join(job.Alertnames, ",")),
+		attribute.String("thelabzone.namespace", job.Namespace),
+	)
+	defer span.End()
+
 	start := time.Now()
 	log.Info("triagem iniciada", "dedup_key", job.DedupKey, "group_key", job.GroupKey, "queued_for", time.Since(job.Received).String())
 
@@ -162,6 +223,8 @@ func (p *Pool) process(ctx context.Context, log *slog.Logger, job Job) {
 
 	if err != nil {
 		p.m.RunErrors.Inc()
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "triagem falhou")
 		// Invariante da janela de dedup: ela contém chaves TRIADAS COM SUCESSO
 		// ou EM CURSO. Triagem que falhou libera a chave — o próximo reenvio do
 		// Alertmanager re-tria em vez de bater em "duplicate" para um grupo que

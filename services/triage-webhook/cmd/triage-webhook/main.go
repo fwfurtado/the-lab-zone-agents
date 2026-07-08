@@ -31,6 +31,7 @@ import (
 	"github.com/fwfurtado/the-lab-zone-agents/services/triage-webhook/internal/core"
 	"github.com/fwfurtado/the-lab-zone-agents/services/triage-webhook/internal/dedup"
 	"github.com/fwfurtado/the-lab-zone-agents/services/triage-webhook/internal/metrics"
+	"github.com/fwfurtado/the-lab-zone-agents/services/triage-webhook/internal/observability"
 	"github.com/fwfurtado/the-lab-zone-agents/services/triage-webhook/internal/pipeline"
 	"github.com/fwfurtado/the-lab-zone-agents/services/triage-webhook/internal/publish"
 	"github.com/fwfurtado/the-lab-zone-agents/services/triage-webhook/internal/server"
@@ -59,6 +60,23 @@ func run() error {
 		"dedup_ttl", cfg.DedupTTL.String(),
 		"triage_timeout", cfg.TriageTimeout.String(),
 	)
+
+	// Tracing OTel: a borda enraíza o trace do caminho de triagem. O shutdown
+	// drena os spans pendentes no encerramento gracioso.
+	shutdown, err := observability.Setup(context.Background(), cfg.OTelEnabled, cfg.OTelServiceName, cfg.OTelEnvironment)
+	if err != nil {
+		return fmt.Errorf("configurando observabilidade: %w", err)
+	}
+	defer func() {
+		sctx, scancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer scancel()
+		if err := shutdown(sctx); err != nil {
+			log.Warn("shutdown do tracing não foi limpo", "err", err)
+		}
+	}()
+	if cfg.OTelEnabled {
+		log.Info("tracing OTel ativo", "service_name", cfg.OTelServiceName)
+	}
 
 	reg := metrics.NewRegistry()
 	m := metrics.NewSet(reg)

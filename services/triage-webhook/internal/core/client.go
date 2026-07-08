@@ -13,6 +13,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Client fala com o núcleo de triagem.
@@ -26,10 +28,13 @@ type Client struct {
 // triagem vem do contexto do worker (TriageTimeout); um timeout fixo aqui
 // brigaria com ele.
 func New(url, healthURL string) *Client {
+	// otelhttp injeta traceparent + baggage nas chamadas ao núcleo (via o
+	// propagador global) e cria um span-cliente por request. Com o tracing
+	// desligado (provider/propagador no-op), é passthrough — nada é injetado.
 	return &Client{
 		url:       url,
 		healthURL: healthURL,
-		hc:        &http.Client{},
+		hc:        &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
 	}
 }
 
