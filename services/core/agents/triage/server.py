@@ -114,7 +114,14 @@ async def _handle_triage(request: web.Request) -> web.Response:
     # headers de entrada e os torna o contexto corrente. Assim o agent run do
     # Pydantic AI vira filho do span da borda (um trace só), e o
     # BaggageSpanProcessor carimba alertname/namespace/session em cada span.
-    ctx = extract(dict(request.headers))
+    #
+    # As chaves vão para lowercase ANTES do extract: o aiohttp entrega um
+    # CIMultiDict (case-insensitive), mas o getter default do OTel busca
+    # 'traceparent'/'baggage' em lowercase e case-SENSITIVE — e o Go manda
+    # 'Traceparent'/'Baggage' (canonical, HTTP/1.1). Sem normalizar, o extract
+    # não acha nada e o trace nasce órfão (bug: dois traces + session errada).
+    carrier = {key.lower(): value for key, value in request.headers.items()}
+    ctx = extract(carrier)
     token = otel_context.attach(ctx)
     try:
         semaphore = request.app[_SEMAPHORE_KEY]
