@@ -14,6 +14,7 @@ from pydantic_ai.usage import UsageLimits
 
 from shared.config import get_settings
 from shared.history import process_history
+from shared.observability import litellm_cost_http_client
 from shared.types import OnDelta
 
 logger = logging.getLogger("the_lab_zone.runtime")
@@ -98,6 +99,10 @@ def build_agent(system_prompt: str) -> Agent:
         provider=OpenAIProvider(
             base_url=settings.litellm_base_url,
             api_key=settings.litellm_key.get_secret_value(),
+            # http_client com hook que lê o custo efetivo do header do LiteLLM
+            # (x-litellm-response-cost) e o anexa como gen_ai.usage.cost no span
+            # de generation. Um cliente por Agent (Assistant é criado 1x/processo).
+            http_client=litellm_cost_http_client(),
         ),
     )
     return Agent(

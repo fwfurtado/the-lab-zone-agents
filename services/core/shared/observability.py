@@ -3,8 +3,9 @@ do Pydantic AI.
 
 A instrumentação vive na APLICAÇÃO, não no gateway LiteLLM: o núcleo conhece o
 domínio (agent run, cada model request, cada tool call, e o conteúdo) que o
-gateway não vê. Este é o patch 1 (base) da inversão da observabilidade de IA —
-ainda SEM baggage e SEM custo, que vêm no patch 2.
+gateway não vê. A instrumentação base é o patch 1; o BaggageSpanProcessor (leva
+os atributos de domínio da borda Go a cada span) e o hook de custo efetivo do
+LiteLLM entram no patch 2b.
 
 Setup ÚNICO por processo, chamado no boot de cada transporte (CLI, server HTTP,
 bot Slack) ANTES de qualquer run de agente. Idempotente e com gate por env
@@ -21,12 +22,24 @@ from __future__ import annotations
 
 import atexit
 import logging
+from typing import TYPE_CHECKING
 
 from shared.config import get_settings
+
+if TYPE_CHECKING:
+    import httpx
 
 logger = logging.getLogger("the_lab_zone.observability")
 
 _configured = False
+
+
+def _domain_baggage_key(key: str) -> bool:
+    """Predicado do BaggageSpanProcessor: copia para atributo de span apenas a
+    baggage de domínio (langfuse.*, thelabzone.*), não qualquer baggage que
+    porventura apareça no contexto.
+    """
+    return key.startswith("langfuse.") or key.startswith("thelabzone.")
 
 
 def configure_observability() -> None:
@@ -65,6 +78,15 @@ def configure_observability() -> None:
         }
     )
     provider = TracerProvider(resource=resource)
+
+    # BaggageSpanProcessor: copia a baggage de domínio (langfuse.*, thelabzone.*)
+    # que a borda Go propaga via header W3C para ATRIBUTOS em cada span do agente
+    # (agent run, model request, tool calls). É o que faz session, trace-name e
+    # alertname/namespace aparecerem no Langfuse por observação.
+    from opentelemetry.processor.baggage import BaggageSpanProcessor
+
+    provider.add_span_processor(BaggageSpanProcessor(_domain_baggage_key))
+
     # OTLPSpanExporter sem endpoint explícito: lê OTEL_EXPORTER_OTLP_ENDPOINT/
     # _PROTOCOL do ambiente (comportamento padrão do SDK).
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
@@ -91,3 +113,36 @@ def configure_observability() -> None:
         settings.otel_service_name,
         settings.otel_semconv_version,
     )
+
+
+def litellm_cost_http_client() -> httpx.AsyncClient:
+    """httpx.AsyncClient que captura o custo EFETIVO do LiteLLM.
+
+    Lê o header `x-litellm-response-cost` da resposta e o anexa como
+    `gen_ai.usage.cost` no span de generation corrente — o custo autoritativo do
+    gateway (inclui fallback/retry), não a estimativa que o Langfuse infere.
+
+    Detalhes:
+    - Só `gen_ai.usage.cost` é lido pelo Langfuse como custo FORNECIDO; o
+      `langfuse.observation.cost_details` tem bug conhecido na ingestão OTLP.
+    - O header vem em respostas NÃO-streaming. O `agent.run` da triagem é
+      não-streaming, então funciona; no caminho streaming (QA/Slack via
+      run_stream) o LiteLLM ainda não emite o header.
+    - Passado ao OpenAIProvider como http_client; um cliente por Agent.
+    """
+    import httpx
+    from opentelemetry import trace
+
+    async def _capture_cost(response: httpx.Response) -> None:
+        raw = response.headers.get("x-litellm-response-cost")
+        if not raw:
+            return
+        try:
+            cost = float(raw)
+        except ValueError:
+            return
+        span = trace.get_current_span()
+        if span.is_recording():
+            span.set_attribute("gen_ai.usage.cost", cost)
+
+    return httpx.AsyncClient(event_hooks={"response": [_capture_cost]})

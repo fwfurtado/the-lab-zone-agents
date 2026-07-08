@@ -31,6 +31,8 @@ import logging
 import os
 
 from aiohttp import web
+from opentelemetry import context as otel_context
+from opentelemetry.propagate import extract
 
 from agents.triage.agent import answer
 from shared.config import get_settings
@@ -108,17 +110,26 @@ async def _handle_triage(request: web.Request) -> web.Response:
         return web.json_response({"error": "campo 'context' ausente ou vazio"}, status=400)
 
     questions_total.inc()
-    semaphore = request.app[_SEMAPHORE_KEY]
-    async with semaphore:
-        with answer_latency.time():
-            try:
-                report = await answer(context)
-            except Exception:
-                answer_errors_total.inc()
-                logger.exception("triagem falhou")
-                return web.json_response(
-                    {"error": "triagem falhou; ver logs do núcleo"}, status=500
-                )
+    # Continua o trace que a borda Go enraizou: extrai traceparent + baggage dos
+    # headers de entrada e os torna o contexto corrente. Assim o agent run do
+    # Pydantic AI vira filho do span da borda (um trace só), e o
+    # BaggageSpanProcessor carimba alertname/namespace/session em cada span.
+    ctx = extract(dict(request.headers))
+    token = otel_context.attach(ctx)
+    try:
+        semaphore = request.app[_SEMAPHORE_KEY]
+        async with semaphore:
+            with answer_latency.time():
+                try:
+                    report = await answer(context)
+                except Exception:
+                    answer_errors_total.inc()
+                    logger.exception("triagem falhou")
+                    return web.json_response(
+                        {"error": "triagem falhou; ver logs do núcleo"}, status=500
+                    )
+    finally:
+        otel_context.detach(token)
 
     return web.json_response({"report": report})
 

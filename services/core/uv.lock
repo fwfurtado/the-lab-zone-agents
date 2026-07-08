@@ -1419,6 +1419,20 @@ wheels = [
 ]
 
 [[package]]
+name = "opentelemetry-processor-baggage"
+version = "0.64b0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/db/fba2d128643a78461ba72e03e094660fe7ed3f69fa22859afcf62cfb50d4/opentelemetry_processor_baggage-0.64b0.tar.gz", hash = "sha256:6a84cf37c25d223dcaec142abfc02c73b1bb78b388f394397f9578b5fbd7a32a", size = 8834, upload-time = "2026-06-24T15:19:47.175Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/e9/e58dd215c3f1e9680c3fce2a7b550fc2602dea76855d520e29ffe94b8a38/opentelemetry_processor_baggage-0.64b0-py3-none-any.whl", hash = "sha256:bbe5cd75060ea158810f4a17040659032304a83877b90a94878919778f53c039", size = 9487, upload-time = "2026-06-24T15:19:06.384Z" },
+]
+
+[[package]]
 name = "opentelemetry-proto"
 version = "1.42.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2398,6 +2412,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "async-lru" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-processor-baggage" },
     { name = "opentelemetry-sdk" },
     { name = "prometheus-client" },
     { name = "pydantic-ai" },
@@ -2418,6 +2433,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.13" },
     { name = "async-lru", specifier = ">=2.0.4" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.42.1" },
+    { name = "opentelemetry-processor-baggage", specifier = ">=0.63b1" },
     { name = "opentelemetry-sdk", specifier = ">=1.42.1" },
     { name = "prometheus-client", specifier = ">=0.25.0" },
     { name = "pydantic-ai", specifier = ">=2.1.0" },
