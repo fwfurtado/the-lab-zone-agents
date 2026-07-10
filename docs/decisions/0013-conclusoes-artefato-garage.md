@@ -57,11 +57,11 @@ O classificador emite **um de dois** tipos. A incoerência é INEXPRESSÁVEL —
 existe "diagnosed sem verdict" nem "inconclusive com confidence":
 
 ```python
-Diagnosed(verdict: str[<=200], confidence: Literal["high","medium","low"], rationale: str)
-Inconclusive(reason: str, rationale: str)
+Diagnosed(verdict: str[<=300], confidence: Literal["high","medium","low"], rationale: str)
+Inconclusive(reason: str[<=300], rationale: str)
 ```
 
-- `verdict`: texto livre (<=200 chars). NÃO é enum: não há taxonomia estável de
+- `verdict`: texto livre (<=300 chars). NÃO é enum: não há taxonomia estável de
   causas. Vira enum quando o corpus tiver volume e a taxonomia emergir.
 - `confidence`: enum em **inglês** — evita acento e variação de grafia no payload
   e no filtro.
@@ -84,8 +84,32 @@ Consequências de não separar:
 
 O union discriminado resolve: são estados estruturalmente diferentes.
 
-### Spec do prompt (herdada do ADR-0008)
+### Teto de tamanho é rede de segurança, não régua de estilo (lição de produção)
 
+O `max_length` do `verdict` nasceu em 200 — colado ao comprimento típico de uma
+causa em PT-BR. Nos primeiros traces reais, **todos** os retries do classificador
+foram `string_too_long` no `verdict`: um caso de 220 chars custou DOIS retries e,
+com `retries=2`, ficou a uma tentativa de falhar de vez. Cada retry reenvia o
+histórico e repaga os `reasoning_tokens` (custo observado: $0.0095 contra $0.0029
+numa classificação de chamada única).
+
+O erro foi conflar duas coisas no mesmo número:
+
+- **"seja conciso"** é pedido de ESTILO → pertence ao **prompt**;
+- **"no máximo N chars"** é rede contra PATOLOGIA (um verdict de dois parágrafos)
+  → pertence ao **schema**.
+
+O modelo não sabe contar caracteres. Um teto colado ao típico transfere a ele uma
+tarefa que ele não executa, e o custo vem em retries. O teto passou a 300 (folga
+de ~65%) e o prompt ganhou o alvo de estilo (~150 chars) mais a proibição da cauda
+de juízo que o modelo anexava ("a policy está funcionando como projetado" — 41
+chars de não-causa). O `verdict` vai ao PAYLOAD do Qdrant, não ao embedding: 300
+chars não custam recuperação.
+
+**Regra geral para saída estruturada de LLM: constranja a forma (enum, união,
+tipo), não a métrica que o modelo não consegue medir.**
+
+### Spec do prompt (herdada do ADR-0008)
 A confiança extraída é a do **diagnóstico primário**, NÃO o mínimo global entre
 afirmações de camadas diferentes. Ressalvas sobre evidência auxiliar ("a métrica
 não tem label de pod", "o PSI não veio") não rebaixam a confiança da conclusão.
