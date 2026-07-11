@@ -214,6 +214,19 @@ func (p *Pool) process(ctx context.Context, log *slog.Logger, job Job) {
 	)
 	defer span.End()
 
+	// Liga trace_id/span_id ao logger deste job: todos os logs abaixo (iniciada,
+	// concluída, falhou, publicação) saem com o trace context, correlacionando
+	// com o Tempo — mesmo formato hex (32/16) do core Python, então um trace no
+	// Tempo casa logs da borda E do núcleo pelo mesmo trace_id. Escopo do span
+	// via log.With: em Go não há "current span" global, injeta o id uma vez pro
+	// job em vez de trocar cada call para a variante *Context.
+	if sc := span.SpanContext(); sc.IsValid() {
+		log = log.With(
+			slog.String("trace_id", sc.TraceID().String()),
+			slog.String("span_id", sc.SpanID().String()),
+		)
+	}
+
 	start := time.Now()
 	log.Info("triagem iniciada", "dedup_key", job.DedupKey, "group_key", job.GroupKey, "queued_for", time.Since(job.Received).String())
 
