@@ -2,11 +2,20 @@
 tipo: adr
 numero: 7
 titulo: Persistência da triagem no Garage (emenda o stdlib-only da borda)
-status: aceito
-relacionado: [0003-borda-go-stdlib-only, 0002-fronteira-go-python-sidecar, the-lab-zone/docs/decisions/0016-headroom-descartado-cap-de-contexto-proprio]
+status: aceito (emendado pelo ADR-0014)
+relacionado: [0003-borda-go-stdlib-only, 0002-fronteira-go-python-sidecar, 0014-confirmacao-humana-slack-modal, the-lab-zone/docs/decisions/0016-headroom-descartado-cap-de-contexto-proprio]
 ---
 
 # ADR-0007 — Persistência da triagem no Garage
+
+> **EMENDA (ADR-0014):** este ADR previu `confirmation: unverified` gravado no
+> front-matter do relatório desde o primeiro dia ("gancho da qualidade de
+> memória", decisão 4 da Fase D) — mas o relatório é IMUTÁVEL, e o campo não
+> tinha, nem podia ter, mecanismo de escrita ali sem violar essa invariante. O
+> ADR-0014 move `confirmation` para um artefato próprio (`confirmations/…`,
+> regravável só por feedback humano explícito) e `buildDocument` para de
+> escrever o campo no relatório. O relatório de triagem permanece imutável e
+> carrega só fatos de alerta.
 
 ## Status
 Aceito. Aplica-se a `services/triage-webhook/`. **Emenda o ADR-0003** (borda Go

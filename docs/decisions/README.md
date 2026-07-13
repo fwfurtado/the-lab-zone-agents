@@ -25,6 +25,7 @@ repositório cobrem a **estrutura do código e do pipeline**.
 | [0011](0011-job-indexer-dag-pvc-efemero.md) | Job do indexer: dag + PVC efêmero | Pods separados (não containerSet, que exige `main` único); PVC efêmero cruza pods; retry por-step |
 | [0012](0012-consumo-dois-mcps-filtro-nomeado.md) | Consumo: dois MCPs upstream com filtro nomeado | `FILTERABLE_FIELDS` via ConfigMap/`envFrom`; `name` sem prefixo `metadata.`; becos evitados documentados |
 | [0013](0013-conclusoes-artefato-garage.md) | Conclusões como artefato próprio no Garage | Emenda o 0008: `conclusions/…md` irmão do relatório; Qdrant 100% derivável; union discriminado (Diagnosed/Inconclusive) |
+| [0014](0014-confirmacao-humana-slack-modal.md) | Confirmação humana como artefato próprio, via botão/modal Slack | Emenda o 0007: `confirmations/…md` terceiro prefixo, isolado do `--reclassify`; botão carrega contexto (sem side-index); `note` obrigatório só ao refutar; filtro `any`, nunca `!=` |
 
 ## Decisões relacionadas no `the-lab-zone`
 
