@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.12.13",
+    "aioboto3>=13.0",  # cliente Garage do listener de feedback (ADR-0014); só
+                       # write, único caminho de escrita S3 em Python neste repo
     "async-lru>=2.0.4",
     "opentelemetry-exporter-otlp-proto-http>=1.42.1",
     "opentelemetry-processor-baggage>=0.63b1",

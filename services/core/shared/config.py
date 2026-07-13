@@ -29,6 +29,18 @@ class Settings(BaseSettings):
 
     toolhive_vmcp_url: str = Field(alias="TOOLHIVE_VMCP_URL")
 
+    # --- Garage (feedback humano de triagem, ADR-0014) ---
+    # Opcionais: só o processo que registra o listener de feedback precisa.
+    # Mesma nomenclatura de env que a borda Go já usa (GaragePublisher,
+    # services/triage-webhook/internal/publish/garage.go) — um vocabulário só
+    # entre as duas linguagens que falam com o mesmo bucket.
+    garage_endpoint: str | None = Field(default=None, alias="GARAGE_ENDPOINT")
+    garage_access_key: SecretStr | None = Field(default=None, alias="GARAGE_ACCESS_KEY")
+    garage_secret_key: SecretStr | None = Field(default=None, alias="GARAGE_SECRET_KEY")
+    garage_bucket: str = Field(default="triage-reports", alias="GARAGE_BUCKET")
+    garage_region: str = Field(default="garage", alias="GARAGE_REGION")
+    garage_use_ssl: bool = Field(default=False, alias="GARAGE_USE_SSL")
+
     # Limites RÍGIDOS de runtime do agente. Regra de prompt pede contenção;
     # estes garantem. Defesa contra tool que despeja resultado gigante e
     # contra loop de tools estourando o contexto/custo.

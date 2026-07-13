@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 
 from async_lru import alru_cache
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
@@ -11,11 +12,18 @@ from shared.slack.message_parser import SlackMessageParser
 from shared.slack.responder import SlackResponder
 from shared.types import AnswerFn
 
+# Um registrador é só "pegue o app vivo e pendure handlers nele" — não devolve
+# nada, só tem efeito colateral de registro. `Awaitable[None] | None` porque
+# alguns registradores podem precisar await (ex.: se algum dia precisarem
+# consultar auth_test antes de registrar); hoje nenhum precisa.
+Registrar = Callable[[AsyncApp], "Awaitable[None] | None"]
+
 
 async def start_bot(
     answer_fn: AnswerFn,
     *,
     logger_name: str = "the_lab_zone.bridge",
+    extra_registrars: list[Registrar] | None = None,
 ) -> None:
     """Sobe a ponte Slack (Socket Mode) para um agente.
 
@@ -23,6 +31,14 @@ async def start_bot(
     shared.types.AnswerFn) e não conhece a implementação concreta. Só o modo
     bot exige os tokens do Slack — por isso são opcionais no config e validados
     aqui, na fronteira que de fato os usa.
+
+    `extra_registrars`: outros handlers que precisam da MESMA conexão Socket
+    Mode (ex.: o feedback de triagem, ADR-0014). Uma segunda conexão com o
+    mesmo app-level token faria o Slack distribuir eventos aleatoriamente
+    entre as duas — a que não trata um tipo de evento o descartaria em
+    silêncio parte das vezes. Registrar no MESMO `app`, antes de abrir o
+    socket, é o que garante que todo evento chega a algum handler que sabe
+    tratá-lo.
     """
     settings = get_settings()
     logger = logging.getLogger(logger_name)
@@ -78,6 +94,11 @@ async def start_bot(
         if event.get("bot_id") or event.get("subtype"):
             return
         await _respond(event, client, say)
+
+    for registrar in extra_registrars or []:
+        maybe_awaitable = registrar(app)
+        if maybe_awaitable is not None:
+            await maybe_awaitable
 
     handler = AsyncSocketModeHandler(app, app_token.get_secret_value())
 
