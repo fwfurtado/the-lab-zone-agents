@@ -7,6 +7,7 @@ isso.
 """
 
 from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -63,7 +64,7 @@ def test_parse_button_value_sem_triage_key():
 
 
 def _ctx(**overrides) -> ModalContext:
-    base = dict(
+    base: dict[str, Any] = dict(
         dedup_key="e80a8f6d3b656e53efc1dc660452abd8",
         triage_key="data/X/20260710__e80a8f6d.md",
         intent="confirmed",

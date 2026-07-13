@@ -8,6 +8,7 @@ testes fixam o contrato aqui, sem depender do outro repo em runtime.
 """
 
 from datetime import UTC, datetime, timezone
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -21,7 +22,7 @@ from shared.confirmations import (
 
 
 def _confirmation(**overrides) -> Confirmation:
-    base = dict(
+    base: dict[str, Any] = dict(
         dedup_key="e80a8f6d3b656e53efc1dc660452abd8",
         confirmation="confirmed",
         confirmed_by="U0123ABCDE",

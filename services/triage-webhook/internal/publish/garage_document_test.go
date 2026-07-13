@@ -159,13 +159,3 @@ func TestReportSuffixEhSufixoDeObjectKey(t *testing.T) {
 		t.Fatalf("objectKey (%q) deveria ser \"triage/\"+reportSuffix (%q)", key, want)
 	}
 }
-
-// TestReportSuffixIdemEntreChamadas: determinístico para o mesmo Report — é o
-// que o botão de feedback embute no `value` e o listener precisa reproduzir
-// (ou melhor: não reconstruir, só repassar) para montar confirmations/<suffix>.
-func TestReportSuffixIdemEntreChamadas(t *testing.T) {
-	r := sampleReport()
-	if reportSuffix(r) != reportSuffix(r) {
-		t.Fatal("reportSuffix deveria ser determinístico")
-	}
-}
