@@ -50,11 +50,42 @@ type slackBlock struct {
 	Text string `json:"text"`
 }
 
+// actionsBlock é o bloco de botões de feedback (ADR-0014), anexado só na
+// mensagem RAIZ (não nos chunks do diagnóstico na thread). Forma própria —
+// não cabe em slackBlock (que só tem type+text).
+type actionsBlock struct {
+	Type     string        `json:"type"`
+	BlockID  string        `json:"block_id"`
+	Elements []slackButton `json:"elements"`
+}
+
+type slackButton struct {
+	Type     string          `json:"type"`
+	ActionID string          `json:"action_id"`
+	Text     slackButtonText `json:"text"`
+	Style    string          `json:"style,omitempty"`
+	Value    string          `json:"value"`
+}
+
+type slackButtonText struct {
+	Type  string `json:"type"`
+	Text  string `json:"text"`
+	Emoji bool   `json:"emoji,omitempty"`
+}
+
+// feedbackButtonValue é o contexto que o botão carrega consigo (ADR-0014). O
+// listener (Python, no processo do slack-qa-bot) o lê de volta no clique —
+// sem índice reverso: o próprio botão sabe a que incidente pertence.
+type feedbackButtonValue struct {
+	DedupKey  string `json:"dedup_key"`
+	TriageKey string `json:"triage_key"` // reportSuffix(r); mesma chave que conclusions/ e confirmations/ espelham
+}
+
 type slackPostRequest struct {
-	Channel  string       `json:"channel"`
-	Text     string       `json:"text"` // fallback p/ notificação e acessibilidade
-	Blocks   []slackBlock `json:"blocks,omitempty"`
-	ThreadTS string       `json:"thread_ts,omitempty"`
+	Channel  string `json:"channel"`
+	Text     string `json:"text"` // fallback p/ notificação e acessibilidade
+	Blocks   []any  `json:"blocks,omitempty"`
+	ThreadTS string `json:"thread_ts,omitempty"`
 }
 
 type slackPostResponse struct {
@@ -77,7 +108,7 @@ func (p *SlackPublisher) Publish(ctx context.Context, r Report) error {
 		chunks = []string{"_(diagnóstico vazio)_"}
 	}
 
-	rootTS, err := p.post(ctx, p.rootMessage(r), "")
+	rootTS, err := p.postRoot(ctx, r)
 	if err != nil {
 		return fmt.Errorf("postando notificação de triagem no Slack: %w", err)
 	}
@@ -95,6 +126,56 @@ func (p *SlackPublisher) Publish(ctx context.Context, r Report) error {
 		}
 	}
 	return nil
+}
+
+// postRoot posta a mensagem raiz COM o bloco de botões de feedback
+// (ADR-0014). Falha ao montar o bloco não aborta a triagem — degrada para a
+// raiz sem botões, best-effort como o resto do publisher (ver Publish).
+func (p *SlackPublisher) postRoot(ctx context.Context, r Report) (string, error) {
+	var extra []any
+	if fb, err := p.feedbackBlock(r); err != nil {
+		p.log.Error("montando bloco de feedback; postando raiz sem botões",
+			"dedup_key", r.DedupKey, "err", err)
+	} else {
+		extra = append(extra, fb)
+	}
+	return p.post(ctx, p.rootMessage(r), "", extra...)
+}
+
+// feedbackBlock monta os botões "Confirmar"/"Refutar" (ADR-0014). O `value` de
+// cada botão carrega dedup_key + triage_key (== reportSuffix(r), o mesmo
+// sufixo que conclusions/ e confirmations/ espelham) — o listener no processo
+// do slack-qa-bot lê isso de volta no clique, sem precisar de índice reverso
+// (channel+ts) para descobrir a que incidente o clique pertence.
+func (p *SlackPublisher) feedbackBlock(r Report) (actionsBlock, error) {
+	raw, err := json.Marshal(feedbackButtonValue{
+		DedupKey:  r.DedupKey,
+		TriageKey: reportSuffix(r),
+	})
+	if err != nil {
+		return actionsBlock{}, err
+	}
+	value := string(raw)
+	return actionsBlock{
+		Type:    "actions",
+		BlockID: "triage_feedback",
+		Elements: []slackButton{
+			{
+				Type:     "button",
+				ActionID: "triage_confirm",
+				Text:     slackButtonText{Type: "plain_text", Text: "✅ Confirmar diagnóstico", Emoji: true},
+				Style:    "primary",
+				Value:    value,
+			},
+			{
+				Type:     "button",
+				ActionID: "triage_refute",
+				Text:     slackButtonText{Type: "plain_text", Text: "❌ Refutar diagnóstico", Emoji: true},
+				Style:    "danger",
+				Value:    value,
+			},
+		},
+	}, nil
 }
 
 func (p *SlackPublisher) rootMessage(r Report) string {
@@ -122,12 +203,15 @@ func (p *SlackPublisher) header(r Report) string {
 }
 
 // post envia uma mensagem. threadTS vazio = mensagem raiz; caso contrário,
-// resposta em thread. Retorna o ts da mensagem criada.
-func (p *SlackPublisher) post(ctx context.Context, text, threadTS string) (string, error) {
+// resposta em thread. extraBlocks são anexados APÓS o bloco markdown do texto
+// (hoje só a mensagem raiz usa isso, para os botões de feedback — ADR-0014).
+// Retorna o ts da mensagem criada.
+func (p *SlackPublisher) post(ctx context.Context, text, threadTS string, extraBlocks ...any) (string, error) {
+	blocks := append([]any{slackBlock{Type: "markdown", Text: text}}, extraBlocks...)
 	body, err := json.Marshal(slackPostRequest{
 		Channel:  p.channel,
 		Text:     text, // fallback de notificação; os blocks fazem o rendering
-		Blocks:   []slackBlock{{Type: "markdown", Text: text}},
+		Blocks:   blocks,
 		ThreadTS: threadTS,
 	})
 	if err != nil {

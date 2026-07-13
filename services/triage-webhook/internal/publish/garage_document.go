@@ -32,9 +32,15 @@ func sanitizeSegment(s string) string {
 	return s
 }
 
-// objectKey deriva a chave do objeto no bucket.
+// reportSuffix é a parte da chave DEPOIS do prefixo do artefato:
 //
-//	triage/{namespace}/{alertname}/{firedAt}__{dedupKey}.md
+//	{namespace}/{alertname}/{firedAt}__{dedupKey}.md
+//
+// Compartilhada por três prefixos irmãos no MESMO bucket: `triage/` (este
+// arquivo, imutável, ADR-0007), `conclusions/` (escrito pelo classificador
+// Python, ADR-0013) e `confirmations/` (escrito pelo listener de feedback do
+// Slack, ADR-0014). Mesmo sufixo, prefixo diferente — é o que permite os três
+// se juntarem por `dedup_key` sem reconstruir a chave em cada consumidor.
 //
 // Decisões (deliberação da Fase D):
 //   - prefixo {namespace}/{alertname} torna o Tier 0 um list-objects por
@@ -47,7 +53,7 @@ func sanitizeSegment(s string) string {
 // alertname/namespace representantes vêm de r.Alertnames[0]/r.Namespace; um
 // grupo multi-alerta usa o primeiro alertname como eixo navegável (a unicidade
 // real é do dedupKey, não do prefixo).
-func objectKey(r Report) string {
+func reportSuffix(r Report) string {
 	ns := "no-namespace"
 	if r.Namespace != "" {
 		ns = sanitizeSegment(r.Namespace)
@@ -61,20 +67,27 @@ func objectKey(r Report) string {
 	if r.FiredAt.IsZero() {
 		ts = "no-firedat"
 	}
-	return fmt.Sprintf("triage/%s/%s/%s__%s.md", ns, alertname, ts, r.DedupKey)
+	return fmt.Sprintf("%s/%s/%s__%s.md", ns, alertname, ts, r.DedupKey)
+}
+
+// objectKey deriva a chave do relatório IMUTÁVEL: "triage/" + reportSuffix.
+func objectKey(r Report) string {
+	return "triage/" + reportSuffix(r)
 }
 
 // buildDocument monta o .md persistido: front-matter YAML + corpo íntegro.
 //
-// O front-matter carrega SÓ fatos de alerta (verbatim, autoritativos) mais o
-// gancho perecível `confirmation`. Sem verdict/confidence: essas conclusões do
-// modelo entram quando o job de embed existir (extração via classificador, ADR
-// à parte) — o corpo íntegro abaixo é a fonte da qual serão regeneradas.
+// O front-matter carrega SÓ fatos de alerta (verbatim, autoritativos). Nem
+// verdict/confidence nem confirmation: são releituras/feedback que precisam
+// MUDAR ao longo do tempo, e este documento é imutável por decisão (ADR-0007,
+// "nasce nunca muda"). Vivem em artefatos irmãos no mesmo bucket:
+// conclusions/ (classificador, ADR-0013) e confirmations/ (feedback humano via
+// Slack, ADR-0014) — o corpo íntegro abaixo é a fonte de onde ambos derivam.
 //
-// `confirmation: unverified` nasce em TODO relatório: é o gancho da qualidade
-// de memória (Fase D, decisão 4). "Esse diagnóstico estava certo?" é
-// conhecimento que decai rápido; o campo tem que existir desde o primeiro
-// relatório, mesmo sem mecanismo de escrita ainda.
+// EMENDA (ADR-0014): este documento já gravou `confirmation: unverified` no
+// front-matter (Fase D, decisão 4) — campo que nunca tinha mecanismo de
+// escrita, porque não podia ter, sem violar a imutabilidade. Removido daqui;
+// o gancho de qualidade de memória agora é o artefato confirmations/.
 func buildDocument(r Report) string {
 	var sb strings.Builder
 	sb.WriteString("---\n")
@@ -97,8 +110,6 @@ func buildDocument(r Report) string {
 	fmt.Fprintf(&sb, "fired_at: %s\n", yamlTimestamp(r.FiredAt))
 	fmt.Fprintf(&sb, "triaged_at: %s\n", yamlTimestamp(r.TriagedAt))
 	fmt.Fprintf(&sb, "summary: %s\n", yamlString(r.Summary))
-	// Perecível, nasce vazio — gancho da decisão 4 (qualidade de memória).
-	sb.WriteString("confirmation: unverified\n")
 	sb.WriteString("---\n\n")
 	sb.WriteString(r.Diagnosis)
 	if !strings.HasSuffix(r.Diagnosis, "\n") {

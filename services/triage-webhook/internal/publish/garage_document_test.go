@@ -79,7 +79,6 @@ func TestBuildDocumentFrontMatter(t *testing.T) {
 		`namespace: "velero"`,
 		`fired_at: "2026-07-05T01:16:20Z"`,
 		`triaged_at: "2026-07-05T01:39:00Z"`,
-		"confirmation: unverified", // perecível, nasce vazio
 		"- \"VeleroBackupStale\"",
 	}
 	for _, s := range mustContain {
@@ -133,5 +132,40 @@ func TestYAMLStringEscapa(t *testing.T) {
 	// A aspa dupla dentro do group_key deve estar escapada.
 	if !strings.Contains(doc, `\"VeleroBackupStale\"`) {
 		t.Errorf("aspas no group_key não escapadas:\n%s", doc)
+	}
+}
+
+// TestBuildDocumentSemConfirmation é a regressão do ADR-0014: o relatório é
+// imutável (ADR-0007) e não tem mecanismo de escrita para confirmation — o
+// campo não deve mais nascer aqui. O gancho de qualidade de memória agora é
+// o artefato confirmations/, escrito só por feedback humano.
+func TestBuildDocumentSemConfirmation(t *testing.T) {
+	doc := buildDocument(sampleReport())
+	if strings.Contains(doc, "confirmation") {
+		t.Fatalf("documento imutável não deve mais mencionar confirmation:\n%s", doc)
+	}
+}
+
+// TestReportSuffixEhSufixoDeObjectKey: reportSuffix é exatamente objectKey
+// menos o prefixo "triage/" — a mesma chave que conclusions/ e
+// confirmations/ espelham (ADR-0013/0014). Se algum dia divergirem, os três
+// prefixos deixam de apontar pro mesmo incidente.
+func TestReportSuffixEhSufixoDeObjectKey(t *testing.T) {
+	r := sampleReport()
+	suffix := reportSuffix(r)
+	key := objectKey(r)
+	want := "triage/" + suffix
+	if key != want {
+		t.Fatalf("objectKey (%q) deveria ser \"triage/\"+reportSuffix (%q)", key, want)
+	}
+}
+
+// TestReportSuffixIdemEntreChamadas: determinístico para o mesmo Report — é o
+// que o botão de feedback embute no `value` e o listener precisa reproduzir
+// (ou melhor: não reconstruir, só repassar) para montar confirmations/<suffix>.
+func TestReportSuffixIdemEntreChamadas(t *testing.T) {
+	r := sampleReport()
+	if reportSuffix(r) != reportSuffix(r) {
+		t.Fatal("reportSuffix deveria ser determinístico")
 	}
 }
