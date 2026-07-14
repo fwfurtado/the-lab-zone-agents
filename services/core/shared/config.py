@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # service.name distingue os domínios no projeto único do Langfuse. MESMO
     # código serve triagem e QA; cada Deployment seta o seu (triage-agent/qa-bot).
     otel_service_name: str = Field(default="the-lab-zone-agent", alias="OTEL_SERVICE_NAME")
+    # Fallback só para local/CI: nos containers, OTEL_NAMESPACE é injetado pelo
+    # Deployment e vira o service.namespace/label service_namespace real.
+    otel_namespace: str = Field(default="local", alias="OTEL_NAMESPACE")
     otel_environment: str = Field(default="prod", alias="OTEL_ENVIRONMENT")
     # version FIXA do semconv GenAI do pydantic-ai: não depender do default, que
     # muda entre releases (2-4 são compat deprecado; 5 é o atual em 2.1.0).
@@ -72,6 +75,16 @@ class Settings(BaseSettings):
     otel_semconv_version: Annotated[Literal[2, 3, 4, 5], BeforeValidator(int)] = Field(
         default=5, alias="OTEL_SEMCONV_VERSION"
     )
+
+    # --- Pyroscope (continuous profiling) ---
+    # Gate separado do OTel: trace e profile têm backends/exporters diferentes,
+    # mas compartilham service.name/service.namespace para correlação no Grafana.
+    pyroscope_enabled: bool = Field(default=True, alias="PYROSCOPE_ENABLED")
+    pyroscope_server_address: str = Field(
+        default="http://pyroscope.observability.svc.cluster.local:4040",
+        alias="PYROSCOPE_SERVER_ADDRESS",
+    )
+    pyroscope_sample_rate: int = Field(default=100, alias="PYROSCOPE_SAMPLE_RATE")
 
     log_level: int = Field(default=logging.INFO, alias="LOG_LEVEL")
 
@@ -100,6 +113,13 @@ class Settings(BaseSettings):
     def _validate_agent_max_concurrency(cls, value: int | None) -> int | None:
         if value is not None and value <= 0:
             raise ValueError("agent_max_concurrency must be > 0")
+        return value
+
+    @field_validator("pyroscope_sample_rate")
+    @classmethod
+    def _validate_pyroscope_sample_rate(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("pyroscope_sample_rate must be > 0")
         return value
 
 

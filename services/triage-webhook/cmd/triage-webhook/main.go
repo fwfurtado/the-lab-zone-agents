@@ -62,8 +62,16 @@ func run() error {
 	)
 
 	// Tracing OTel: a borda enraíza o trace do caminho de triagem. O shutdown
-	// drena os spans pendentes no encerramento gracioso.
-	shutdown, err := observability.Setup(context.Background(), cfg.OTelEnabled, cfg.OTelServiceName, cfg.OTelEnvironment)
+	// drena profiles/spans pendentes no encerramento gracioso.
+	shutdown, err := observability.Setup(
+		context.Background(),
+		cfg.OTelEnabled,
+		cfg.PyroscopeEnabled,
+		cfg.OTelServiceName,
+		cfg.OTelNamespace,
+		cfg.OTelEnvironment,
+		cfg.PyroscopeServerAddress,
+	)
 	if err != nil {
 		return fmt.Errorf("configurando observabilidade: %w", err)
 	}
@@ -71,11 +79,23 @@ func run() error {
 		sctx, scancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer scancel()
 		if err := shutdown(sctx); err != nil {
-			log.Warn("shutdown do tracing não foi limpo", "err", err)
+			log.Warn("shutdown da observabilidade não foi limpo", "err", err)
 		}
 	}()
 	if cfg.OTelEnabled {
-		log.Info("tracing OTel ativo", "service_name", cfg.OTelServiceName)
+		log.Info(
+			"tracing OTel ativo",
+			"service_name", cfg.OTelServiceName,
+			"service_namespace", cfg.OTelNamespace,
+		)
+	}
+	if cfg.PyroscopeEnabled {
+		log.Info(
+			"profiling Pyroscope ativo",
+			"service_name", cfg.OTelServiceName,
+			"service_namespace", cfg.OTelNamespace,
+			"server", cfg.PyroscopeServerAddress,
+		)
 	}
 
 	reg := metrics.NewRegistry()

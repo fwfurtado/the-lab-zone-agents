@@ -10,11 +10,13 @@ go 1.26
 require github.com/minio/minio-go/v7 v7.0.70
 
 // Inversão da observabilidade: OTel na borda (a borda enraíza o trace e propaga
-// contexto W3C ao núcleo). EMENDA o ADR-0003 (stdlib-only -> deps justificadas).
+// contexto W3C ao núcleo) e Pyroscope para profiling contínuo. EMENDA o ADR-0003
+// (stdlib-only -> deps justificadas).
 // As versões abaixo são um PISO; rode `go mod tidy` (ou `go get <mods>@latest`)
 // na sua máquina para fixar as versões exatas e gerar/atualizar o go.sum — o
 // sandbox que gera este patch não alcança o proxy de módulos Go.
 require (
+	github.com/grafana/pyroscope-go v1.4.1
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0
 	go.opentelemetry.io/otel v1.38.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.38.0
@@ -29,8 +31,9 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/grafana/pyroscope-go/godeltaprof v0.1.11 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2 // indirect
-	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/rs/xid v1.5.0 // indirect

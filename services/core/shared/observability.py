@@ -1,5 +1,4 @@
-"""Observabilidade OTel do núcleo: TracerProvider + export OTLP + instrumentação
-do Pydantic AI.
+"""Observabilidade do núcleo: OTel traces + Pyroscope profiles.
 
 A instrumentação vive na APLICAÇÃO, não no gateway LiteLLM: o núcleo conhece o
 domínio (agent run, cada model request, cada tool call, e o conteúdo) que o
@@ -9,7 +8,7 @@ LiteLLM entram no patch 2b.
 
 Setup ÚNICO por processo, chamado no boot de cada transporte (CLI, server HTTP,
 bot Slack) ANTES de qualquer run de agente. Idempotente e com gate por env
-(OTEL_ENABLED) para não exigir um Collector em runs locais/CI.
+(OTEL_ENABLED/PYROSCOPE_ENABLED) para não exigir backends em runs locais/CI.
 
 O endpoint e o protocolo do exporter vêm das envs PADRÃO do OTel
 (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_PROTOCOL), lidas direto pelo SDK
@@ -42,15 +41,46 @@ def _domain_baggage_key(key: str) -> bool:
     return key.startswith("langfuse.") or key.startswith("thelabzone.")
 
 
-def configure_observability() -> None:
-    """Configura o TracerProvider global e instrumenta todos os Agents.
+def _configure_pyroscope() -> None:
+    settings = get_settings()
+    if not settings.pyroscope_enabled:
+        logger.info("pyroscope desabilitado (PYROSCOPE_ENABLED=false); sem profiling")
+        return
 
-    No-op se já configurado (dois transportes no mesmo processo não acontece hoje,
-    mas a idempotência é barata) ou se OTEL_ENABLED=false.
+    # Import adiado pelo mesmo motivo dos imports OTel: testes/lint não devem
+    # exigir o SDK se profiling estiver desligado no ambiente local.
+    import pyroscope
+
+    pyroscope.configure(
+        application_name=settings.otel_service_name,
+        server_address=settings.pyroscope_server_address,
+        sample_rate=settings.pyroscope_sample_rate,
+        tags={
+            "service_name": settings.otel_service_name,
+            "service_namespace": settings.otel_namespace,
+            "deployment_environment": settings.otel_environment,
+        },
+    )
+    logger.info(
+        "pyroscope configurado: service=%s namespace=%s server=%s sample_rate=%d",
+        settings.otel_service_name,
+        settings.otel_namespace,
+        settings.pyroscope_server_address,
+        settings.pyroscope_sample_rate,
+    )
+
+
+def configure_observability() -> None:
+    """Configura profiling, TracerProvider global e instrumenta todos os Agents.
+
+    No-op se já configurado; dois transportes no mesmo processo não acontece hoje,
+    mas a idempotência é barata.
     """
     global _configured
     if _configured:
         return
+
+    _configure_pyroscope()
 
     settings = get_settings()
     if not settings.otel_enabled:
@@ -73,7 +103,7 @@ def configure_observability() -> None:
     resource = Resource.create(
         {
             "service.name": settings.otel_service_name,
-            "service.namespace": "the-lab-zone",
+            "service.namespace": settings.otel_namespace,
             "deployment.environment": settings.otel_environment,
         }
     )
@@ -109,8 +139,9 @@ def configure_observability() -> None:
 
     _configured = True
     logger.info(
-        "otel configurado: service=%s namespace=the-lab-zone semconv=v%d include_content=True",
+        "otel configurado: service=%s namespace=%s semconv=v%d include_content=True",
         settings.otel_service_name,
+        settings.otel_namespace,
         settings.otel_semconv_version,
     )
 

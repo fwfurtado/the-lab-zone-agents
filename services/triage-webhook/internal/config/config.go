@@ -62,7 +62,14 @@ type Config struct {
 	// protocolo do exporter vêm das envs padrão OTEL_EXPORTER_OTLP_*.
 	OTelEnabled     bool   // OTEL_ENABLED (default true); false desliga o tracing
 	OTelServiceName string // OTEL_SERVICE_NAME (default triage-webhook)
+	OTelNamespace   string // OTEL_NAMESPACE (default local para CI/dev)
 	OTelEnvironment string // OTEL_ENVIRONMENT (default prod)
+
+	// Pyroscope* configuram continuous profiling. O service.name usado nos
+	// traces também é usado como application/profile label para permitir
+	// correlação trace -> profile no Grafana.
+	PyroscopeEnabled       bool   // PYROSCOPE_ENABLED (default true)
+	PyroscopeServerAddress string // PYROSCOPE_SERVER_ADDRESS
 }
 
 // Load lê a configuração de env. Erros de parsing abortam o boot — config
@@ -82,7 +89,12 @@ func Load() (Config, error) {
 		GarageBucket:    getenv("GARAGE_BUCKET", "the-lab-zone-triage"),
 		GarageRegion:    getenv("GARAGE_REGION", "garage"),
 		OTelServiceName: getenv("OTEL_SERVICE_NAME", "triage-webhook"),
+		OTelNamespace:   getenv("OTEL_NAMESPACE", "local"),
 		OTelEnvironment: getenv("OTEL_ENVIRONMENT", "prod"),
+		PyroscopeServerAddress: getenv(
+			"PYROSCOPE_SERVER_ADDRESS",
+			"http://pyroscope.observability.svc.cluster.local:4040",
+		),
 	}
 
 	var err error
@@ -90,6 +102,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.OTelEnabled, err = getbool("OTEL_ENABLED", true); err != nil {
+		return Config{}, err
+	}
+	if cfg.PyroscopeEnabled, err = getbool("PYROSCOPE_ENABLED", true); err != nil {
 		return Config{}, err
 	}
 	if cfg.Workers, err = getint("WORKERS", 2); err != nil {

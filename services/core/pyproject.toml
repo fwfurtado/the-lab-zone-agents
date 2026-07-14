@@ -13,6 +13,7 @@ dependencies = [
     "opentelemetry-processor-baggage>=0.63b1",
     "opentelemetry-sdk>=1.42.1",
     "prometheus-client>=0.25.0",
+    "pyroscope-io>=0.8.12",
     "pydantic-ai>=2.1.0",
     "pydantic-settings>=2.14.2",
     "slack-bolt>=1.28.0",
